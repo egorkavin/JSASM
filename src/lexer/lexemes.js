@@ -26,7 +26,7 @@ let isHexadecimalCharacter = char => HEXADECIMAL_NUMBERS.indexOf(char) > -1;
 let isNumber = char => isHexadecimalCharacter(char);
 let isSpace = char => SPACES.indexOf(char) > -1;
 let isLetter = char => char.toLowerCase() !== char.toUpperCase();
-let isTextConstant = char => char === '\'' || char === '\"';
+let isQuote = char => char === '\'' || char === '\"';
 let isIdentifier = char => isLetter(char) || isAllowedCharacter(char) || isNumber(char);
 
 function isRightNumber(number) {
@@ -58,7 +58,7 @@ function keywordType(lexeme) {
     } else if (REGISTERS_8.some(item => item === lexeme)) {
         return 'Register 8';
     } else {
-        return 'identifier'
+        return 'Identifier'
     }
 }
 
@@ -93,7 +93,7 @@ module.exports = {
     isHexadecimalCharacter,
     isNumber,
     isSpace,
-    isTextConstant,
+    isQuote,
     isRightNumber,
     isLetter,
     chooseType,
