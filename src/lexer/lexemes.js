@@ -10,7 +10,7 @@ const ALLOWED_CHARACTERS = "_@$?";
 const BINARY_NUMBERS = "01";
 const DECIMAL_NUMBERS = "0123456789";
 const HEXADECIMAL_NUMBERS = "0123456789ABCDEF";
-const CONTROL_CHARACTERS = [" ", "\t", "\r", "\n"];
+const SPACES = [" ", "\t", "\r", "\n"];
 
 let isMnemonic = char => COMMANDS.indexOf(char) > -1;
 let isDirectives = char => DIRECTIVES.indexOf(char) > -1;
@@ -24,12 +24,12 @@ let isBinaryCharacter = char => BINARY_NUMBERS.indexOf(char) > -1;
 let isDecimalCharacter = char => DECIMAL_NUMBERS.indexOf(char) > -1;
 let isHexadecimalCharacter = char => HEXADECIMAL_NUMBERS.indexOf(char) > -1;
 let isNumber = char => isHexadecimalCharacter(char);
-let isControlCharacter = char => CONTROL_CHARACTERS.indexOf(char) > -1;
+let isSpace = char => SPACES.indexOf(char) > -1;
 let isLetter = char => char.toLowerCase() !== char.toUpperCase();
 let isTextConstant = char => char === '\'' || char === '\"';
-let isIdentifierCharacter = char => isLetter(char) || isAllowedCharacter(char) || isNumber(char);
+let isIdentifier = char => isLetter(char) || isAllowedCharacter(char) || isNumber(char);
 
-let isRightNumber = number => {
+function isRightNumber(number) {
     let lastChar = number.pop();
     if (lastChar === 'B') {
         return number.every(char => isBinaryCharacter(char)) ? 'binaryNumber' : 'error';
@@ -64,7 +64,7 @@ function keywordType(lexeme) {
 
 function chooseType(lexeme, type) {
     switch (type) {
-        case 'identifierOrKeyword':
+        case 'id':
             return keywordType(lexeme);
         case 'textConstant':
             return 'Text constant';
@@ -87,12 +87,12 @@ module.exports = {
     isRegister16,
     isRegister8,
     isSingleCharacter,
-    isIdentifierCharacter,
+    isIdentifier,
     isBinaryCharacter,
     isDecimalCharacter,
     isHexadecimalCharacter,
     isNumber,
-    isControlCharacter,
+    isSpace,
     isTextConstant,
     isRightNumber,
     isLetter,
