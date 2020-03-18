@@ -40,7 +40,7 @@ function isRightNumber(number) {
     } else {
         return 'error';
     }
-};
+}
 
 function keywordType(lexeme) {
     if (COMMANDS.some(item => item === lexeme)) {
@@ -69,7 +69,7 @@ function chooseType(lexeme, type) {
         case 'textConstant':
             return 'Text constant';
         case 'singleCharacter':
-            return 'Single character'
+            return 'Single character';
         case 'binaryNumber':
             return 'Binary number';
         case 'decimalNumber':

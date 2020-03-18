@@ -32,16 +32,23 @@ function typeOfChar(char) {
         return 'space';
     } else if (char === ';') {
         return 'comment';
+    } else {
+        return 'error';
     }
 }
 
 function makeToken(lexeme, state, tokensArray) {
     if (state === 'number') {
         state = LEXEMES.isRightNumber(lexeme.slice());
+        if (state === 'error') {
+            lexeme = 'Error! Incorrect number!'.split('');
+            tokensArray.length = 0;
+        }
     }
     let token = new Token(lexeme.join(''), LEXEMES.chooseType(lexeme.join(''), state));
     tokensArray.push(token);
     lexeme.length = 0;
+    return state;
 }
 
 function makeArrayOfTokens(string) {
@@ -49,7 +56,7 @@ function makeArrayOfTokens(string) {
     let tokens = [];
     let currentLexeme = [];
     for (let i = 0; i < string.length; i++) {
-        if (state !== 'comment'){
+        if (state !== 'comment') {
             let char = string[i];
             switch (state) {
                 case 'start':
@@ -69,11 +76,13 @@ function makeArrayOfTokens(string) {
                         if (char === 'H') {
                             i++;
                             currentLexeme.push(char);
-                            makeToken(currentLexeme, state, tokens);
-                        } else {
-                            makeToken(currentLexeme, state, tokens);
                         }
-                        state = 'start';
+                        state = makeToken(currentLexeme, state, tokens);
+                        if (state === 'error'){
+                            state = 'exit';
+                        } else {
+                            state = 'start';
+                        }
                     }
                     break;
                 case 'textConstant':
@@ -93,6 +102,16 @@ function makeArrayOfTokens(string) {
                     state = 'start';
                     break;
                 }
+                case 'error': {
+                    tokens = [];
+                    char = currentLexeme.pop();
+                    currentLexeme = `Error! Invalid character: ${char}`;
+                    currentLexeme = currentLexeme.split('');
+                    state = 'exit';
+                }
+            }
+            if (state === 'exit') {
+                break;
             }
             if (state === 'start' && !LEXEMES.isSpace(char) && !LEXEMES.isQuote(char)) {
                 i--;
@@ -111,13 +130,17 @@ function makeArrayOfTokens(string) {
 function outputTable(arrayOfTokens) {
     fs.writeFileSync("table.txt", "Result of lexical analysis\n\n");
     arrayOfTokens.forEach(tokenObject => {
-        fs.appendFileSync("table.txt", tokenObject.assemblyString + '\n');
-        //fs.appendFileSync("table.txt", "_________________________\n");//FIXME calc length
+        fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
+        //fs.appendFileSync("table.txt", "----------\n");
         tokenObject.token.forEach(item => {
-            fs.appendFileSync("table.txt", `|${item.lexeme}|${item.length}|${item.type}|\n`);
+            if(item.type === undefined){
+                fs.appendFileSync("table.txt", item.lexeme + '\n');
+            } else {
+                fs.appendFileSync("table.txt", `${item.lexeme}\t${item.length}\t${item.type}\n`);
+            }
         });
         fs.appendFileSync("table.txt", "\n\n");
     })
 }
 
-let table = makeTableOfLexemes('test.txt');
+outputTable(makeTableOfLexemes('test.txt'));
