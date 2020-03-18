@@ -1,128 +1,40 @@
 let LEXEMES = require('./lexemes');
 let fs = require('fs');
 
-function makeLexemesTable(inputFilePath) {
+function makeTableOfLexemes(inputFilePath) {
     let arrayOfStrings = fs.readFileSync(inputFilePath).toString().split('\r\n').filter(item => item.length);
     let tokenTable = [];
     arrayOfStrings.forEach(function (string) {
-        let state = {
-            current: 'start',
-            next: 'start',
-            resetState() {
-                this.current = 'start';
-                this.next = 'start';
-            }
-        };
-        let tokens = [];
-        let currentLexeme = [];
-        let currentToken = {};
-        // string = string + " ";
-        for (let i = 0; i < string.length; i++) {
-            if (state.next !== 'comment') {
-                let char = string[i];
-                char = char.toUpperCase();
-                switch (state.current) {
-                    case 'start':
-                        state.next = startCase(char);
-                        break;
-                    case 'identifierOrKeyword':
-                        if (!LEXEMES.isIdentifierCharacter(char)) {
-                            state.next = 'makeToken';
-                        }
-                        break;
-                    case 'number':
-                        if (!LEXEMES.isNumber(char)) {
-                            if (char === 'H') {
-                                state.next = 'numberEnd'
-                            } else if (LEXEMES.isControlCharacter(char)) {
-                                state.current = LEXEMES.isRightNumber(currentLexeme.slice());
-                                state.next = 'makeToken';
-                            }
-                        }
-                        break;
-                    case 'textConstant':
-                        if (LEXEMES.isTextConstant(char)) {
-                            state.next = 'makeToken';
-                        }
-                        break;
-                    case 'singleCharacter': {
-                        state.next = 'makeToken';
-                        break;
-                    }
-                    case 'numberEnd': {
-                        state.current = LEXEMES.isRightNumber(currentLexeme.slice());
-                        state.next = 'makeToken';
-                        break;
-                    }
-                }
-                //console.log(state.next + " " + char);
-                if (state.next === 'makeToken') {
-                    currentToken.lexeme = currentLexeme.join('');
-                    currentToken.length = currentLexeme.length;
-                    currentToken.type = LEXEMES.chooseType(currentToken.lexeme, state.current);
-                    tokens.push(Object.assign({}, currentToken));
-                    state.resetState();
-                    currentLexeme = [];
-                    if (!LEXEMES.isControlCharacter(char)) {
-                        i--;
-                    }
-                } else {
-                    if (!LEXEMES.isControlCharacter(char) && !LEXEMES.isTextConstant(char)) {
-                        currentLexeme.push(char);
-                    }
-                    state.current = state.next;
-                }
-            }
 
-        }
-        if (tokens.length !== 0) {
-            tokenTable.push({
-                assemblyString: string,
-                token: tokens,
-            })
-        }
     });
     return tokenTable;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-function makeTableOfLexemes(inputFilePath) {
-    let arrayOfArraysOfLexemes = splitFileIntoArray(inputFilePath);
-    let tokensArray = [];
-    arrayOfArraysOfLexemes.forEach(arrayOfLexemes => {
-        let state = {
-            current: 'start',
-            next: 'start',
-            resetState() {
-                this.current = 'start';
-                this.next = 'start';
-            }
-        };
-        let tokens = [];
-        let currentLexeme = [];
-        let currentToken = {};
-        for (let lexeme of arrayOfLexemes) {
-            identifyLexemeType(lexeme);
+function makeArrayOfTokens(string) {
+    let state = {
+        current: 'start',
+        next: 'start',
+        resetState() {
+            this.current = 'start';
+            this.next = 'start';
         }
-    })
+    };
+    let tokens = [];
+    let currentLexeme = [];
+    let currentToken = {};
 }
 
-function splitFileIntoArray(file) {
-    let arrayOfStrings = fs.readFileSync(file).toString().split('\r\n').filter(item => item.length);
+function State(current = 'start', next = 'start') {
+    this.current = current;
+    this.next = next;
 }
 
-function identifyLexemeType(lexeme) {
-    for(let i = 0; i < lexeme.length; i++){
+State.prototype.resetState = function () {
+    this.current = 'start';
+    this.next = 'start';
+};
 
-    }
-}
-
-let arrayOfStrings = fs.readFileSync('../test.txt').toString().split("\r\n").filter(item => item.length);
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-function startCase(char) {
+function identifyCharType(char) {
     char = char.toUpperCase();
     if (LEXEMES.isLetter(char)) {
         return 'identifierOrKeyword';
@@ -151,6 +63,5 @@ function outputTable(arrayOfTokens) {
     })
 }
 
-outputTable(makeLexemesTable('../test.txt'));
-let table = makeLexemesTable('../test.txt');
+//let table = makeTableOfLexemes('test.txt');
 console.log();
