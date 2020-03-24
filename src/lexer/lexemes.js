@@ -29,16 +29,18 @@ let isLetter = char => char.toLowerCase() !== char.toUpperCase();
 let isQuote = char => char === '\'' || char === '\"';
 let isIdentifier = char => isLetter(char) || isAllowedCharacter(char) || isNumber(char);
 
-function isRightNumber(number) {
-    let lastChar = number.pop();
-    if (lastChar === 'B') {
-        return number.every(char => isBinaryCharacter(char)) ? 'binaryNumber' : 'error';
-    } else if (lastChar === 'D' || isNumber(lastChar)) {
-        return number.every(char => isDecimalCharacter(char)) ? 'decimalNumber' : 'error';
-    } else if (lastChar === 'H') {
-        return number.every(char => isHexadecimalCharacter(char)) ? 'hexadecimalNumber' : 'error';
-    } else {
-        return 'error';
+function chooseType(lexeme, type) {
+    switch (type) {
+        case 'id':
+            return keywordType(lexeme);
+        case 'textConstant':
+            return 'Text constant';
+        case 'singleCharacter':
+            return 'Single character';
+        case 'number':
+            return isRightNumber(lexeme.split(''));
+        default:
+            return 'error';
     }
 }
 
@@ -62,20 +64,16 @@ function keywordType(lexeme) {
     }
 }
 
-function chooseType(lexeme, type) {
-    switch (type) {
-        case 'id':
-            return keywordType(lexeme);
-        case 'textConstant':
-            return 'Text constant';
-        case 'singleCharacter':
-            return 'Single character';
-        case 'binaryNumber':
-            return 'Binary number';
-        case 'decimalNumber':
-            return 'Decimal number';
-        case 'hexadecimalNumber':
-            return 'Hexadecimal number';
+function isRightNumber(number) {
+    let lastChar = number.pop();
+    if (lastChar === 'B') {
+        return number.every(char => isBinaryCharacter(char)) ? 'Binary number' : 'error';
+    } else if (lastChar === 'D' || isDecimalCharacter(lastChar)) {
+        return number.every(char => isDecimalCharacter(char)) ? 'Decimal number' : 'error';
+    } else if (lastChar === 'H') {
+        return number.every(char => isHexadecimalCharacter(char)) ? 'Hexadecimal number' : 'error';
+    } else {
+        return 'error';
     }
 }
 

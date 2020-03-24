@@ -19,7 +19,7 @@ function makeTableOfLexemes(inputFilePath) {
     return tokenTable;
 }
 
-function typeOfChar(char) {
+function typeOfChar(char) {//TODO rename return values
     if (LEXEMES.isLetter(char)) {
         return 'id';
     } else if (LEXEMES.isNumber(char)) {
@@ -38,17 +38,13 @@ function typeOfChar(char) {
 }
 
 function makeToken(lexeme, state, tokensArray) {
-    if (state === 'number') {
-        state = LEXEMES.isRightNumber(lexeme.slice());
-        if (state === 'error') {
-            lexeme = 'Error! Incorrect number!'.split('');
-            tokensArray.length = 0;
-        }
+    let type = LEXEMES.chooseType(lexeme.join(''), state);
+    if (type === 'error') {
+        lexeme = `Error! Invalid character: ${lexeme.pop()}`.split('');
     }
-    let token = new Token(lexeme.join(''), LEXEMES.chooseType(lexeme.join(''), state));
+    let token = new Token(lexeme.join(''), type);
     tokensArray.push(token);
     lexeme.length = 0;
-    return state;
 }
 
 function makeArrayOfTokens(string) {
@@ -56,72 +52,61 @@ function makeArrayOfTokens(string) {
     let tokens = [];
     let currentLexeme = [];
     for (let i = 0; i < string.length; i++) {
-        if (state !== 'comment') {
-            let char = string[i];
-            switch (state) {
-                case 'start':
-                    char = char.toUpperCase();
-                    state = typeOfChar(char);
-                    break;
-                case 'id':
-                    char = char.toUpperCase();
-                    if (!LEXEMES.isIdentifier(char)) {
-                        makeToken(currentLexeme, state, tokens);
-                        state = 'start';
-                    }
-                    break;
-                case 'number':
-                    char = char.toUpperCase();
-                    if (!LEXEMES.isNumber(char)) {
-                        if (char === 'H') {
-                            i++;
-                            currentLexeme.push(char);
-                        }
-                        state = makeToken(currentLexeme, state, tokens);
-                        if (state === 'error'){
-                            state = 'exit';
-                        } else {
-                            state = 'start';
-                        }
-                    }
-                    break;
-                case 'textConstant':
-                    if (LEXEMES.isQuote(char)) {
-                        currentLexeme = currentLexeme.slice(1);
-                        makeToken(currentLexeme, state, tokens);
-                        state = 'start';
-                    }
-                    break;
-                case 'singleCharacter': {
+        let char = string[i];
+        switch (state) {
+            case 'start':
+                state = typeOfChar(char);
+                i--;
+                break;
+            case 'id':
+                char = char.toUpperCase();
+                currentLexeme.push(char);
+                if (!LEXEMES.isIdentifier(char)) {
+                    currentLexeme = currentLexeme.slice(0, -1);
                     makeToken(currentLexeme, state, tokens);
                     state = 'start';
-                    break;
+                    i--;
                 }
-                case 'space': {
-                    currentLexeme = [];
+                break;
+            case 'number':
+                char = char.toUpperCase();
+                currentLexeme.push(char);
+                if (!LEXEMES.isNumber(char) && char !== 'H') {
+                    currentLexeme = currentLexeme.slice(0, -1);
+                    makeToken(currentLexeme, state, tokens);
                     state = 'start';
-                    break;
+                    i--;
                 }
-                case 'error': {
-                    tokens = [];
-                    char = currentLexeme.pop();
-                    currentLexeme = `Error! Invalid character: ${char}`;
-                    currentLexeme = currentLexeme.split('');
-                    state = 'exit';
+                break;
+            case 'textConstant':
+                currentLexeme.push(char);
+                if (LEXEMES.isQuote(char) && currentLexeme.length > 1) {
+                    currentLexeme = currentLexeme.slice(1, -1);
+                    makeToken(currentLexeme, state, tokens);
+                    state = 'start';
                 }
-            }
-            if (state === 'exit') {
+                break;
+            case 'singleCharacter': {
+                currentLexeme.push(char);
+                makeToken(currentLexeme, state, tokens);
+                state = 'start';
                 break;
             }
-            if (state === 'start' && !LEXEMES.isSpace(char) && !LEXEMES.isQuote(char)) {
-                i--;
-            }
-            if (state !== 'space' && state !== 'comment' && state !== 'start') {
+            case 'space':
+                if (!LEXEMES.isSpace(char)) {
+                    state = 'start';
+                    i--;
+                }
+                break;
+            case 'comment':
+                return tokens;
+            case 'error':
                 currentLexeme.push(char);
-            }
+                makeToken(currentLexeme, 'error', tokens);
+                return tokens;
         }
     }
-    if (currentLexeme.length !== 0) {
+    if (currentLexeme.length) {
         makeToken(currentLexeme, state, tokens);
     }
     return tokens;
@@ -133,7 +118,7 @@ function outputTable(arrayOfTokens) {
         fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
         //fs.appendFileSync("table.txt", "----------\n");
         tokenObject.token.forEach(item => {
-            if(item.type === undefined){
+            if (item.type === 'error') {
                 fs.appendFileSync("table.txt", item.lexeme + '\n');
             } else {
                 fs.appendFileSync("table.txt", `${item.lexeme}\t${item.length}\t${item.type}\n`);
@@ -143,4 +128,6 @@ function outputTable(arrayOfTokens) {
     })
 }
 
-outputTable(makeTableOfLexemes('test.txt'));
+let table = makeTableOfLexemes('test.txt');
+outputTable(table);
+console.log(table);
