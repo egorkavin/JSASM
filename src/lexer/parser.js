@@ -1,15 +1,20 @@
 let tableOfLexemes = require('./lexer');
 let LEXEMES = require('./lexemes');
 let fs = require('fs');
+
 function makeSyntaxTable(tableOfLexemes) {
     tableOfLexemes.forEach(obj => {
         obj.sentenceStructure = makeSentence(obj);
     });
+
     return tableOfLexemes;
 }
 
 function makeSentence(obj) {
-    let sentenceStructure = "";
+    let sentenceStructure = {
+        operands: [],
+        mnem: [],
+    };
     let tokens = obj.token;
     let state = 'start';
     let amount = 0;
@@ -21,12 +26,12 @@ function makeSentence(obj) {
                     state = 'labelOrName';
                 } else {
                     state = 'mnem';
-                    sentenceStructure = "-\t|";
+                    sentenceStructure.labelOrName = "-";
                     i--;
                 }
                 break;
             case 'labelOrName':
-                sentenceStructure = "0\t|";
+                sentenceStructure.labelOrName = "0";
                 state = 'mnem';
                 if (token.lexeme !== ':') {
                     i--;
@@ -35,7 +40,7 @@ function makeSentence(obj) {
             case 'mnem':
                 if (LEXEMES.isMnemonic(token.type.toUpperCase())) {
                     state = 'checkShortDword';
-                    sentenceStructure += i + '\t1|';
+                    sentenceStructure.mnem = [i, 1];
                 } else {
                     return `Syntax error '${token.lexeme}': expected label or name or mnemonic`;
                 }
@@ -95,7 +100,7 @@ function makeSentence(obj) {
                 }
                 break;
             case 'regCheck':
-                if (LEXEMES.isRegister32(token.lexeme) || LEXEMES.isRegister16(token.lexeme) || LEXEMES.isRegister8(token.lexeme)){
+                if (LEXEMES.isRegister32(token.lexeme) || LEXEMES.isRegister16(token.lexeme) || LEXEMES.isRegister8(token.lexeme)) {
                     state = 'closingBracketCheck';
                     amount++;
                 } else {
@@ -103,7 +108,7 @@ function makeSentence(obj) {
                 }
                 break;
             case 'closingBracketCheck':
-                if (token.lexeme === ']'){
+                if (token.lexeme === ']') {
                     state = 'newOp';
                     amount++;
                 } else {
@@ -113,7 +118,8 @@ function makeSentence(obj) {
             case 'newOp':
                 if (token.lexeme === ',') {
                     state = 'checkShortDword';
-                    sentenceStructure += i - amount + '\t' + amount + '|';
+                    //sentenceStructure += i - amount + '\t' + amount + '|';
+                    sentenceStructure.operands.push([i - amount, amount]);
                     amount = 0;
                 } else {
                     return `Syntax error '${token.lexeme}': expected comma`;
@@ -122,7 +128,7 @@ function makeSentence(obj) {
         }
     }
     if (amount !== 0) {
-        sentenceStructure += tokens.length - amount + '\t' + amount + '|';
+        sentenceStructure.operands.push([tokens.length - amount, amount]);
     }
     return sentenceStructure;
 }
@@ -131,14 +137,17 @@ function outputTable(tableOfLexemes) {
     fs.writeFileSync("table.txt", "Result of lexical and syntactic analysis\n\n");
     tableOfLexemes.forEach(tokenObject => {
         fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
-        tokenObject.token.forEach(item => {
+        tokenObject.token.forEach((item, index) => {
             if (item.type === 'error') {
                 fs.appendFileSync("table.txt", item.lexeme + '\n');
             } else {
-                fs.appendFileSync("table.txt", `${item.lexeme}\t${item.length}\t${item.type}\n`);
+                fs.appendFileSync("table.txt", `${index}\t${item.lexeme}\t${item.length}\t${item.type}\n`);
             }
         });
-        fs.appendFileSync("table.txt", 'Sentence structure:\n' + tokenObject.sentenceStructure);
+        fs.appendFileSync('table.txt', `Sentence structure:
+         Label or name: ${tokenObject.sentenceStructure.labelOrName}
+         Mnemonic: ${JSON.stringify(tokenObject.sentenceStructure.mnem)}
+         Operands: ${JSON.stringify(tokenObject.sentenceStructure.operands)}`);
         fs.appendFileSync("table.txt", "\n\n");
     })
 }
