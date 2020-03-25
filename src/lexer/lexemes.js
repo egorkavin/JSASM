@@ -5,6 +5,7 @@ const SEGMENT_REGISTERS = ["CS", "FS", "DS", "ES", "GS", "SS"];
 const REGISTERS_32 = ["EAX", "ECX", "EDX", "EBX", "ESP", "EBP", "ESI", "EDI"];
 const REGISTERS_16 = ["AX", "CX", "DX", "BX", "SP", "BP", "SI", "DI"];
 const REGISTERS_8 = ["AH", "AL", "DH", "DL", "CH", "CL", "BH", "BL"];
+const ALL_MNEMONICS = ['COMMAND', 'DIRECTIVE', 'DATA TYPE', 'SEGMENT_REGISTER', 'REGISTERS 32', 'REGISTERS 16', 'REGISTERS 8'];
 const SINGLE_CHARACTERS = ["[", "]", ":", ",", "+", "-", "*", "/"];
 const ALLOWED_CHARACTERS = "_@$?";
 const BINARY_NUMBERS = "01";
@@ -12,12 +13,14 @@ const DECIMAL_NUMBERS = "0123456789";
 const HEXADECIMAL_NUMBERS = "0123456789ABCDEF";
 const SPACES = [" ", "\t", "\r", "\n"];
 
-let isMnemonic = char => COMMANDS.indexOf(char) > -1;
+let isCommand = char => COMMANDS.indexOf(char) > -1;
 let isDirectives = char => DIRECTIVES.indexOf(char) > -1;
 let isDataType = char => DATA_TYPES.indexOf(char) > -1;
+let isSegmentRegister = string => SEGMENT_REGISTERS.indexOf(string) > -1;
 let isRegister32 = char => REGISTERS_32.indexOf(char) > -1;
 let isRegister16 = char => REGISTERS_16.indexOf(char) > -1;
 let isRegister8 = char => REGISTERS_8.indexOf(char) > -1;
+let isMnemonic = type => ALL_MNEMONICS.indexOf(type) > -1;
 let isSingleCharacter = char => SINGLE_CHARACTERS.indexOf(char) > -1;
 let isAllowedCharacter = char => ALLOWED_CHARACTERS.indexOf(char) > -1;
 let isBinaryCharacter = char => BINARY_NUMBERS.indexOf(char) > -1;
@@ -78,12 +81,13 @@ function isRightNumber(number) {
 }
 
 module.exports = {
-    isMnemonic,
+    isCommand,
     isDirectives,
     isDataType,
     isRegister32,
     isRegister16,
     isRegister8,
+    isMnemonic,
     isSingleCharacter,
     isIdentifier,
     isBinaryCharacter,
@@ -95,4 +99,5 @@ module.exports = {
     isRightNumber,
     isLetter,
     chooseType,
+    isSegmentRegister,
 };

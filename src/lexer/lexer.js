@@ -19,34 +19,6 @@ function makeTableOfLexemes(inputFilePath) {
     return tokenTable;
 }
 
-function typeOfChar(char) {//TODO rename return values
-    if (LEXEMES.isLetter(char)) {
-        return 'id';
-    } else if (LEXEMES.isNumber(char)) {
-        return 'number';
-    } else if (LEXEMES.isQuote(char)) {
-        return 'textConstant';
-    } else if (LEXEMES.isSingleCharacter(char)) {
-        return 'singleCharacter';
-    } else if (LEXEMES.isSpace(char)) {
-        return 'space';
-    } else if (char === ';') {
-        return 'comment';
-    } else {
-        return 'error';
-    }
-}
-
-function makeToken(lexeme, state, tokensArray) {
-    let type = LEXEMES.chooseType(lexeme.join(''), state);
-    if (type === 'error') {
-        lexeme = `Error! Invalid character: ${lexeme.pop()}`.split('');
-    }
-    let token = new Token(lexeme.join(''), type);
-    tokensArray.push(token);
-    lexeme.length = 0;
-}
-
 function makeArrayOfTokens(string) {
     let state = 'start';
     let tokens = [];
@@ -112,22 +84,33 @@ function makeArrayOfTokens(string) {
     return tokens;
 }
 
-function outputTable(arrayOfTokens) {
-    fs.writeFileSync("table.txt", "Result of lexical analysis\n\n");
-    arrayOfTokens.forEach(tokenObject => {
-        fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
-        //fs.appendFileSync("table.txt", "----------\n");
-        tokenObject.token.forEach(item => {
-            if (item.type === 'error') {
-                fs.appendFileSync("table.txt", item.lexeme + '\n');
-            } else {
-                fs.appendFileSync("table.txt", `${item.lexeme}\t${item.length}\t${item.type}\n`);
-            }
-        });
-        fs.appendFileSync("table.txt", "\n\n");
-    })
+function typeOfChar(char) {
+    if (LEXEMES.isLetter(char)) {
+        return 'id';
+    } else if (LEXEMES.isNumber(char)) {
+        return 'number';
+    } else if (LEXEMES.isQuote(char)) {
+        return 'textConstant';
+    } else if (LEXEMES.isSingleCharacter(char)) {
+        return 'singleCharacter';
+    } else if (LEXEMES.isSpace(char)) {
+        return 'space';
+    } else if (char === ';') {
+        return 'comment';
+    } else {
+        return 'error';
+    }
+}
+
+function makeToken(lexeme, state, tokensArray) {
+    let type = LEXEMES.chooseType(lexeme.join(''), state);
+    if (type === 'error') {
+        lexeme = `Error! Invalid character: ${lexeme.pop()}`.split('');
+    }
+    let token = new Token(lexeme.join(''), type);
+    tokensArray.push(token);
+    lexeme.length = 0;
 }
 
 let table = makeTableOfLexemes('test.txt');
-outputTable(table);
-console.log(table);
+module.exports = table;
