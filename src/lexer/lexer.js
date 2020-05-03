@@ -11,10 +11,20 @@ function makeTableOfLexemes(inputFilePath) {
     let arrayOfStrings = fs.readFileSync(inputFilePath).toString().split('\r\n').filter(item => item.length);
     let tokenTable = [];
     arrayOfStrings.forEach(function (string) {
-        tokenTable.push({
-            assemblyString: string,
-            token: makeArrayOfTokens(string),
-        })
+        let curToken = makeArrayOfTokens(string);
+        if (Array.isArray(curToken)) {
+            if (curToken.length !== 0) {
+                tokenTable.push({
+                    assemblyString: string,
+                    token: curToken,
+                });
+            }
+        } else {
+            tokenTable.push({
+                assemblyString: string,
+                error: curToken.errorMessage,
+            });
+        }
     });
     return tokenTable;
 }
@@ -71,11 +81,10 @@ function makeArrayOfTokens(string) {
                 }
                 break;
             case 'comment':
-                return tokens;
+                return [];
             case 'error':
                 currentLexeme.push(char);
-                makeToken(currentLexeme, 'error', tokens);
-                return tokens;
+                return {errorMessage: 'Error! Invalid character: ' + char};
         }
     }
     if (currentLexeme.length) {
@@ -85,7 +94,7 @@ function makeArrayOfTokens(string) {
 }
 
 function typeOfChar(char) {
-    if (LEXEMES.isLetter(char)) {
+    if (LEXEMES.isLetter(char) || LEXEMES.isAllowedCharacter(char)) {
         return 'id';
     } else if (LEXEMES.isNumber(char)) {
         return 'number';
@@ -104,13 +113,10 @@ function typeOfChar(char) {
 
 function makeToken(lexeme, state, tokensArray) {
     let type = LEXEMES.chooseType(lexeme.join(''), state);
-    if (type === 'error') {
-        lexeme = `Error! Invalid character: ${lexeme.pop()}`.split('');
-    }
     let token = new Token(lexeme.join(''), type);
     tokensArray.push(token);
     lexeme.length = 0;
 }
 
-let table = makeTableOfLexemes('test.txt');
-module.exports = table;
+module.exports = makeTableOfLexemes('test.txt');
+;

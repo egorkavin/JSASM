@@ -4,9 +4,15 @@ let fs = require('fs');
 
 function makeSyntaxTable(tableOfLexemes) {
     tableOfLexemes.forEach(obj => {
-        obj.sentenceStructure = makeSentence(obj);
+        if (obj.hasOwnProperty('token')) {
+            let sentenceStructure = makeSentence(obj);
+            if (sentenceStructure.hasOwnProperty('errorMessage')) {
+                obj.error = sentenceStructure.errorMessage;
+            } else {
+                obj.sentenceStructure = makeSentence(obj);
+            }
+        }
     });
-
     return tableOfLexemes;
 }
 
@@ -42,7 +48,7 @@ function makeSentence(obj) {
                     state = 'checkShortDword';
                     sentenceStructure.mnem = [i, 1];
                 } else {
-                    return `Syntax error '${token.lexeme}': expected label or name or mnemonic`;
+                    return {errorMessage: `Syntax error '${token.lexeme}': expected label or name or mnemonic`};
                 }
                 break;
             case 'checkShortDword':
@@ -62,7 +68,7 @@ function makeSentence(obj) {
                     state = 'segReg';
                     amount++;
                 } else {
-                    return `Syntax error '${token.lexeme}': expected PTR`;
+                    return {errorMessage: `Syntax error '${token.lexeme}': expected PTR`};
                 }
                 break;
             case 'segReg':
@@ -79,7 +85,7 @@ function makeSentence(obj) {
                     state = 'id';
                     amount++;
                 } else {
-                    return `Syntax error '${token.lexeme}': expected colon`;
+                    return {errorMessage: `Syntax error '${token.lexeme}': expected colon`};
                 }
                 break;
             case 'id':
@@ -87,7 +93,9 @@ function makeSentence(obj) {
                     state = 'openingBracketCheck';
                     amount++;
                 } else {
-                    return `Syntax error '${token.lexeme}': expected operand`;
+                    //return `Syntax error '${token.lexeme}': expected operand`;
+                    state = 'openingBracketCheck';
+                    i--;
                 }
                 break;
             case 'openingBracketCheck':
@@ -104,7 +112,7 @@ function makeSentence(obj) {
                     state = 'closingBracketCheck';
                     amount++;
                 } else {
-                    return `Syntax error '${token.lexeme}': expected register`;
+                    return {errorMessage: `Syntax error '${token.lexeme}': expected register`};
                 }
                 break;
             case 'closingBracketCheck':
@@ -112,7 +120,7 @@ function makeSentence(obj) {
                     state = 'newOp';
                     amount++;
                 } else {
-                    return `Syntax error '${token.lexeme}': expected closing bracket`;
+                    return {errorMessage: `Syntax error '${token.lexeme}': expected closing bracket`};
                 }
                 break;
             case 'newOp':
@@ -122,7 +130,7 @@ function makeSentence(obj) {
                     sentenceStructure.operands.push([i - amount, amount]);
                     amount = 0;
                 } else {
-                    return `Syntax error '${token.lexeme}': expected comma`;
+                    return {errorMessage: `Syntax error '${token.lexeme}': expected comma`};
                 }
                 break;
         }
@@ -152,4 +160,5 @@ function outputTable(tableOfLexemes) {
     })
 }
 
-outputTable(makeSyntaxTable(tableOfLexemes));
+//outputTable(makeSyntaxTable(tableOfLexemes));
+module.exports = makeSyntaxTable(tableOfLexemes);

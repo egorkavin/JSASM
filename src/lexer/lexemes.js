@@ -1,4 +1,4 @@
-const COMMANDS = ["CLI", "MUL", "DIV", "ADD", "CMP", "XOR", "MOV", "AND", "JE", "JMP"];//TODO short
+const COMMANDS = ["CLI", "MUL", "DIV", "ADD", "CMP", "XOR", "MOV", "AND", "JE", "JMP"];
 const DIRECTIVES = ["END", "SEGMENT", "ENDS", "ASSUME"];
 const DATA_TYPES = ["DB", "DW", "DD"];
 const SEGMENT_REGISTERS = ["CS", "FS", "DS", "ES", "GS", "SS"];
@@ -96,8 +96,8 @@ module.exports = {
     isNumber,
     isSpace,
     isQuote,
-    isRightNumber,
     isLetter,
     chooseType,
     isSegmentRegister,
+    isAllowedCharacter,
 };
