@@ -11,18 +11,18 @@ function makeTableOfLexemes(inputFilePath) {
     let arrayOfStrings = fs.readFileSync(inputFilePath).toString().split('\r\n').filter(item => item.length);
     let tokenTable = [];
     arrayOfStrings.forEach(function (string) {
-        let curToken = makeArrayOfTokens(string);
-        if (Array.isArray(curToken)) {
-            if (curToken.length !== 0) {
+        let curTokens = makeArrayOfTokens(string);
+        if (Array.isArray(curTokens)) {
+            if (curTokens.length !== 0) {
                 tokenTable.push({
                     assemblyString: string,
-                    token: curToken,
+                    tokens: curTokens,
                 });
             }
         } else {
             tokenTable.push({
                 assemblyString: string,
-                error: curToken.errorMessage,
+                error: curTokens.errorMessage,
             });
         }
     });
@@ -119,4 +119,3 @@ function makeToken(lexeme, state, tokensArray) {
 }
 
 module.exports = makeTableOfLexemes('test.txt');
-;

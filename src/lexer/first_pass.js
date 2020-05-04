@@ -1,6 +1,5 @@
 let tableOfLexemes = require('./lexer');
 let tableOfStructures = require('./parser');
-let LEXEMES = require('./lexemes');
 let fs = require('fs');
 
 /*
@@ -51,11 +50,7 @@ let fs = require('fs');
 *   JMP SHORT
 *       EB cb   JMP rel8
  */
-let arr = [1,2];
-for (let i of arr){
-    setTimeout(i, 2000);
-}
-console.log(i)
+
 let commands = [
     new Command('CLI', false, false),
     new Command('MUL', true, false, ['MEM']),
@@ -75,11 +70,6 @@ function Command(mnem, hasMODRM, hasIMM, operands) {
 }
 
 function getCommand(mnem) {
-    // for (let command of commands) {
-    //     if (command.mnem === mnem) {
-    //         return command;
-    //     }
-    // }
     return commands.find(command => command.mnem === mnem);
 }
 
@@ -96,8 +86,6 @@ function getSegRegBySegment(segment) {
     return Object.keys(SegRegTable).find(key => SegRegTable[key] === segment);
 }
 
-let activeSeg = -1;
-
 let segmentsTable = [];
 
 function Segment(name, bitDepth = 32, offset = 0) {
@@ -107,19 +95,7 @@ function Segment(name, bitDepth = 32, offset = 0) {
 }
 
 function tableHasSegment(segmentName) {
-    return tableHasField(segmentsTable, segmentName);
-}
-
-function tableHasName(varName) {
-    return tableHasField(variablesTable, varName);
-}
-
-function tableHasField(table, newField) {
-    for (let field of table) {
-        if (field.name === newField)
-            return true;
-    }
-    return false;
+    return segmentsTable.find(segment => segment.name === segmentName) !== undefined;
 }
 
 let variablesTable = [];
@@ -129,6 +105,10 @@ function Variable(name, type, value, segment) {
     this.type = type;
     this.value = value;
     this.segment = segment;
+}
+
+function tableHasVar(varName) {
+    return variablesTable.find(variable => variable.name === varName) !== undefined;
 }
 
 function Operand(type) {
@@ -141,58 +121,54 @@ function tableHasLabel(labelName) {
     return labelsTable.indexOf(labelName) !== -1;
 }
 
+let activeSeg = -1;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 function first_pass() {
     tableOfLexemes.forEach((tokenObject, index) => {
+        defineTokensType(tokenObject);
+        createTables(tokenObject, index);
         if (!tokenObject.hasOwnProperty('error')) {
-            defineTokensType(tokenObject);
-            if (!tokenObject.hasOwnProperty('error')) {
-                createTables(tokenObject, index);
+            setOperandsType(tokenObject);
+        }
+        if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {
+            let typesMismatch = doesOperandTypesMatch(tokenObject.tokens[0].lexeme, tokenObject.operands);
+            if (typesMismatch) {
+                tokenObject.error = 'Error! Operand types must match!'
             }
-            if (!tokenObject.hasOwnProperty('error')) {
-                setOperandsType(tokenObject);
-            }
-            if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {
-                let typesMismatch = doesOperandTypesMatch(tokenObject.token[0].lexeme, tokenObject.operands);
-                if (typesMismatch) {
-                    tokenObject.error = 'Error! Operand types must match!'
-                }
-            }
-            if (!tokenObject.hasOwnProperty('error')) {
-                calculateSize(tokenObject);
-            }
+        }
+        if (!tokenObject.hasOwnProperty('error')) {
+            calculateSize(tokenObject);
         }
     });
 }
 
 function defineTokensType(tokenObject) {
-    let tokensArray = tokenObject.token;
-    if (tokensArray.length === 2 &&
-        tokensArray[0].type === 'Identifier' &&
-        tokensArray[1].lexeme === 'SEGMENT') {
-        tokenObject.type = 'SEGMENT_DEFINITION';
-    } else if (tokensArray.length === 2 &&
-        tokensArray[0].type === 'Identifier' &&
-        tokensArray[1].lexeme === 'ENDS') {
-        tokenObject.type = 'SEGMENT_END';
-    } else if (tokensArray.length === 3 &&
-        tokensArray[0].type === 'Identifier' &&
-        tokensArray[1].type === 'Data type') {
-        tokenObject.type = 'ID_DEFINITION';
-    } else if (tokensArray.length > 2 &&
-        tokensArray[0].type === 'Directive' &&
-        tokensArray[0].lexeme === 'ASSUME') {
-        tokenObject.type = 'ASSUME_DEFINITION';
-    } else if (tokensArray.length === 2 &&
-        tokensArray[0].type === 'Identifier' &&
-        tokensArray[1].lexeme === ':') {
-        tokenObject.type = 'LABEL';
-    } else if (tokensArray.length === 1 &&
-        tokensArray[0].lexeme === 'END') {
-        tokenObject.type = 'END_DIRECTIVE';
-    } else {
-        if (tokensArray.length > 0 && tokensArray[0].type === 'Command') {
+    if (!tokenObject.hasOwnProperty('error')) {
+        let tokensArray = tokenObject.tokens;
+        if (tokensArray.length === 2 &&
+            tokensArray[0].type === 'Identifier' &&
+            tokensArray[1].lexeme === 'SEGMENT') {
+            tokenObject.type = 'SEGMENT_DEFINITION';
+        } else if (tokensArray.length === 2 &&
+            tokensArray[0].type === 'Identifier' &&
+            tokensArray[1].lexeme === 'ENDS') {
+            tokenObject.type = 'SEGMENT_END';
+        } else if (tokensArray.length === 3 &&
+            tokensArray[0].type === 'Identifier' &&
+            tokensArray[1].type === 'Data type') {
+            tokenObject.type = 'ID_DEFINITION';
+        } else if (tokensArray.length > 2 &&
+            tokensArray[0].type === 'Directive' &&
+            tokensArray[0].lexeme === 'ASSUME') {
+            tokenObject.type = 'ASSUME_DEFINITION';
+        } else if (tokensArray.length === 2 &&
+            tokensArray[0].type === 'Identifier' &&
+            tokensArray[1].lexeme === ':') {
+            tokenObject.type = 'LABEL';
+        } else if (tokensArray.length === 1 &&
+            tokensArray[0].lexeme === 'END') {
+            tokenObject.type = 'END_DIRECTIVE';
+        } else if (tokensArray[0].type === 'Command') {
             tokenObject.type = 'COMMAND';
         } else {
             tokenObject.error = 'Error! Unknown token!';
@@ -201,44 +177,43 @@ function defineTokensType(tokenObject) {
 }
 
 function createTables(tokenObject, index) {
-    if (tokenObject.type === 'SEGMENT_DEFINITION') {
-        if (tableHasSegment(tokenObject.token[0].lexeme)) {
-            activeSeg = segmentsTable.indexOf(tokenObject.token[0].lexeme);
-        } else {
-            segmentsTable.push(new Segment(tokenObject.token[0].lexeme));
-            activeSeg = segmentsTable.length - 1;
-        }
-    } else if (tokenObject.type === 'SEGMENT_END') {
-        if (!tableHasSegment(tokenObject.token[0].lexeme)) {
-            tokenObject.error = 'Error! Current segment doesn\'t exist.'
-        } else {
-            activeSeg = -1;
-        }
-    } else if (tokenObject.type === 'ASSUME_DEFINITION') {
-        setSegReg(tokenObject.token, tokenObject.sentenceStructure);
-    } else if (activeSeg !== -1) {
-        if (tokenObject.type === 'ID_DEFINITION') {
-            if (tableHasName(tokenObject.token[0].lexeme)) {
-                tokenObject.error = 'Error! Duplicate of variables.'
+    if (!tokenObject.hasOwnProperty('error')) {
+        if (tokenObject.type === 'SEGMENT_DEFINITION') {
+            if (tableHasSegment(tokenObject.tokens[0].lexeme)) {
+                activeSeg = segmentsTable.indexOf(tokenObject.tokens[0].lexeme);
             } else {
-                variablesTable.push(new Variable(tokenObject.token[0].lexeme,
-                    tokenObject.token[1].lexeme,
-                    tokenObject.token[2].lexeme,
-                    segmentsTable.slice(-1)[0].name));
+                segmentsTable.push(new Segment(tokenObject.tokens[0].lexeme));
+                activeSeg = segmentsTable.length - 1;
             }
-        } else if (tokenObject.type === 'LABEL') {
-            if (tableHasLabel(tokenObject.token[0].lexeme)) {
-                tokenObject.error = 'Error! Duplicate of labels.';
+        } else if (tokenObject.type === 'SEGMENT_END') {
+            if (tableHasSegment(tokenObject.tokens[0].lexeme)) {
+                activeSeg = -1;
             } else {
-                labelsTable.push(tokenObject.token[0].lexeme);
+                tokenObject.error = 'Error! Current segment doesn\'t exist.'
             }
+        } else if (tokenObject.type === 'ASSUME_DEFINITION') {
+            setSegReg(tokenObject.tokens, tokenObject.sentenceStructure);
+        } else if (activeSeg !== -1) {
+            if (tokenObject.type === 'ID_DEFINITION') {
+                if (tableHasVar(tokenObject.tokens[0].lexeme)) {
+                    tokenObject.error = 'Error! Duplicate of variables.'
+                } else {
+                    variablesTable.push(new Variable(tokenObject.tokens[0].lexeme,
+                        tokenObject.tokens[1].lexeme,
+                        tokenObject.tokens[2].lexeme,
+                        segmentsTable.slice(-1)[0].name));
+                }
+            } else if (tokenObject.type === 'LABEL') {
+                if (tableHasLabel(tokenObject.tokens[0].lexeme)) {
+                    tokenObject.error = 'Error! Duplicate of labels.';
+                } else {
+                    labelsTable.push(tokenObject.tokens[0].lexeme);
+                }
+            }
+        } else if (tokenObject.type !== 'END_DIRECTIVE') {
+            tokenObject.error = 'Error! Data out of segment!';
         }
-    } else if (tokenObject.type !== 'END_DIRECTIVE') {
-        tokenObject.error = 'Error! Data out of segment!';
     }
-    // else if (index === tableOfLexemes.length - 1 && tokenObject.type !== 'FILE_END') {
-    //     console.log('Error!');//TODO
-    // }
 }
 
 function setSegReg(tokens, structure) {
@@ -254,10 +229,9 @@ function setOperandsType(tokenObject) {
         tokenObject.operands = [];
         let structure = tokenObject.sentenceStructure;
         let operands = structure.operands;
-        tokenObject.offset = 0;
-        operands.forEach(operand => {
+        operands.forEach((operand, i) => {
             if (operand[1] === 1) {
-                switch (tokenObject.token[operand[0]].type) {
+                switch (tokenObject.tokens[operand[0]].type) {
                     case 'Register 8':
                         tokenObject.operands.push(new Operand('REG8'));
                         break;
@@ -270,18 +244,21 @@ function setOperandsType(tokenObject) {
                     case 'Binary number':
                     case 'Decimal number':
                     case 'Hexadecimal number':
-                        let num = toDecimal(tokenObject.token[operand[0]].lexeme);
-                        Math.abs(num) > 255 ? tokenObject.operands.push(new Operand('IMM8')) : tokenObject.operands.push(new Operand('IMM32'));
+                        let num = toDecimal(tokenObject.tokens[operand[0]].lexeme);
+                        tokenObject.operands.push(new Operand(getTypeOfIMM(num)));
+                        tokenObject.operands.push(getNumSize(num));
                         break;
                     case 'Identifier':
                     //TODO
                 }
+            } else if (getId(tokenObject, i)) {
+                tokenObject.operands.push(getIdType(tokenObject.tokens));
             } else {
                 tokenObject.operands.push(new Operand('MEM'));
             }
         })
-    } else if (tokenObject.type === 'ID_DEFINITION') {
-        segmentsTable.slice(-1)[0].offset += getIdSize(tokenObject.token);
+    } else if (tokenObject.type === 'ID_DEFINITION') {//TODO move this to the function that get size
+        segmentsTable.slice(-1)[0].offset += getIdSize(tokenObject.tokens);
     }
 }
 
@@ -296,10 +273,42 @@ function toDecimal(num) {
     }
 }
 
-function getIdSize(token) {
+function getTypeOfIMM(num) {
+    if (num >= Math.pow(num, 16)){
+        return 'IMM32';
+    } else if (num >= Math.pow(num, 8)){
+        return 'IMM16';
+    } else {
+        return 'IMM8';
+    }
+}
+
+function getNumSize(num) {
+    if (num >= Math.pow(num, 16)) {
+        return new Operand('IMM32');
+    } else if (num >= Math.pow(num, 8)) {
+        return new Operand('IMM16');
+    } else {
+        return new Operand('IMM8');
+    }
+}
+
+function getIdType(token) {
     switch (variablesTable.slice(-1)[0].type) {
         case 'DB':
-            return token[2].type === 'Text constant' ? token[2].lexeme.length : 1;
+            return 'MEM8';
+        case 'DW':
+            return 'MEM16';
+        case 'DD':
+            return 'MEM32';
+
+    }
+}
+
+function getIdSize(tokens) {
+    switch (variablesTable.slice(-1)[0].type) {
+        case 'DB':
+            return tokens[2].type === 'Text constant' ? tokens[2].lexeme.length : 1;
         case 'DW':
             return 2;
         case 'DD':
@@ -323,10 +332,10 @@ function doesOperandTypesMatch(mnem, operands) {
 
 function calculateSize(tokenObject) {
     if (tokenObject.type === 'ID_DEFINITION') {
-        tokenObject.offset = getIdSize(tokenObject.token);
+        tokenObject.offset = getIdSize(tokenObject.tokens);
     } else if (tokenObject.type === 'COMMAND') {
         tokenObject.offset = 1;//TODO for jmp
-        if(getCommand(tokenObject.token[0].lexeme).hasMODRM){
+        if (getCommand(tokenObject.tokens[0].lexeme).hasMODRM) {
             tokenObject.offset++;
         }
         let operands = tokenObject.operands;
@@ -364,11 +373,11 @@ function calculateSize(tokenObject) {
                             tokenObject.offset += 4;
                             break;
                     }
-                } else if (reg.lexeme === 'BP' || reg.lexeme === 'EBP'){
+                } else if (reg.lexeme === 'BP' || reg.lexeme === 'EBP') {
                     tokenObject.offset++;
                 }
 
-                if (reg.lexeme === 'ESP'){
+                if (reg.lexeme === 'ESP') {
                     tokenObject.offset++;
                 }
             }
@@ -382,8 +391,8 @@ function getReg16FromMemOp(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
     let opEnd = tokenObject.sentenceStructure.operands[opPos][1] + opBeg - 1;
     for (let i = opBeg; i < opEnd; i++) {
-        if (tokenObject.token[i].type === 'Register 16') {
-            return tokenObject.token[i].lexeme
+        if (tokenObject.tokens[i].type === 'Register 16') {
+            return tokenObject.tokens[i].lexeme
         }
     }
 }
@@ -394,7 +403,7 @@ function isAllowedReg16InMem(reg16) {//bx bp si di
 
 function hasSegReg(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
-    return tokenObject.token[opBeg].type === 'Segment register';
+    return tokenObject.tokens[opBeg].type === 'Segment register';
 }
 
 function doesSegRegMatch(tokenObject, opPos) {
@@ -406,15 +415,15 @@ function doesSegRegMatch(tokenObject, opPos) {
 
 function getSegReg(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
-    return tokenObject.token[opBeg].lexeme;
+    return tokenObject.tokens[opBeg].lexeme;
 }
 
 function getRegToken(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
     let opEnd = tokenObject.sentenceStructure.operands[opPos][1] + opBeg - 1;
     for (let i = opBeg; i < opEnd; i++) {
-        if (tokenObject.token[i].type.split(' ')[0] === 'Register') {
-            return tokenObject.token[i];
+        if (tokenObject.tokens[i].type.split(' ')[0] === 'Register') {
+            return tokenObject.tokens[i];
         }
     }
 }
@@ -423,8 +432,8 @@ function getId(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
     let opEnd = tokenObject.sentenceStructure.operands[opPos][1] + opBeg - 1;
     for (let i = opBeg; i < opEnd; i++) {
-        if (tokenObject.token[i].type === 'Identifier') {
-            return tokenObject.token[i].lexeme;
+        if (tokenObject.tokens[i].type === 'Identifier') {
+            return tokenObject.tokens[i].lexeme;
         }
     }
 }
@@ -435,7 +444,7 @@ function isSSReg(reg) {
 
 function hasId(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
-    return tokenObject.token[opBeg].type === 'Identifier';
+    return tokenObject.tokens[opBeg].type === 'Identifier';
 }
 
 function doesHiddenSegRegMatch(tokenObject, opPos) {

@@ -4,7 +4,7 @@ let fs = require('fs');
 
 function makeSyntaxTable(tableOfLexemes) {
     tableOfLexemes.forEach(obj => {
-        if (obj.hasOwnProperty('token')) {
+        if (obj.hasOwnProperty('tokens')) {
             let sentenceStructure = makeSentence(obj);
             if (sentenceStructure.hasOwnProperty('errorMessage')) {
                 obj.error = sentenceStructure.errorMessage;
@@ -21,7 +21,7 @@ function makeSentence(obj) {
         operands: [],
         mnem: [],
     };
-    let tokens = obj.token;
+    let tokens = obj.tokens;
     let state = 'start';
     let amount = 0;
     for (let i = 0; i < tokens.length; i++) {
@@ -141,24 +141,24 @@ function makeSentence(obj) {
     return sentenceStructure;
 }
 
-function outputTable(tableOfLexemes) {
-    fs.writeFileSync("table.txt", "Result of lexical and syntactic analysis\n\n");
-    tableOfLexemes.forEach(tokenObject => {
-        fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
-        tokenObject.token.forEach((item, index) => {
-            if (item.type === 'error') {
-                fs.appendFileSync("table.txt", item.lexeme + '\n');
-            } else {
-                fs.appendFileSync("table.txt", `${index}\t${item.lexeme}\t${item.length}\t${item.type}\n`);
-            }
-        });
-        fs.appendFileSync('table.txt', `Sentence structure:
-         Label or name: ${tokenObject.sentenceStructure.labelOrName}
-         Mnemonic: ${JSON.stringify(tokenObject.sentenceStructure.mnem)}
-         Operands: ${JSON.stringify(tokenObject.sentenceStructure.operands)}`);
-        fs.appendFileSync("table.txt", "\n\n");
-    })
-}
+// function outputTable(tableOfLexemes) {
+//     fs.writeFileSync("table.txt", "Result of lexical and syntactic analysis\n\n");
+//     tableOfLexemes.forEach(tokenObject => {
+//         fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
+//         tokenObject.tokens.forEach((item, index) => {
+//             if (item.type === 'error') {
+//                 fs.appendFileSync("table.txt", item.lexeme + '\n');
+//             } else {
+//                 fs.appendFileSync("table.txt", `${index}\t${item.lexeme}\t${item.length}\t${item.type}\n`);
+//             }
+//         });
+//         fs.appendFileSync('table.txt', `Sentence structure:
+//          Label or name: ${tokenObject.sentenceStructure.labelOrName}
+//          Mnemonic: ${JSON.stringify(tokenObject.sentenceStructure.mnem)}
+//          Operands: ${JSON.stringify(tokenObject.sentenceStructure.operands)}`);
+//         fs.appendFileSync("table.txt", "\n\n");
+//     })
+// }
 
 //outputTable(makeSyntaxTable(tableOfLexemes));
 module.exports = makeSyntaxTable(tableOfLexemes);
