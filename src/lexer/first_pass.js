@@ -52,30 +52,15 @@ let fs = require('fs');
  */
 
 let commands = [
-    new Command('CLI', false, false),
-    new Command('MUL', true, false, ['MEM8']),
-    new Command('MUL', true, false, ['MEM16']),
-    new Command('MUL', true, false, ['MEM32']),
-    new Command('DIV', true, false, ['REG8']),
-    new Command('DIV', true, false, ['REG16']),
-    new Command('DIV', true, false, ['REG32']),
-    new Command('ADD', true, true, ['MEM8', 'IMM8']),
-    new Command('ADD', true, true, ['MEM16', 'IMM8']),
-    new Command('ADD', true, true, ['MEM16', 'IMM16']),
-    new Command('ADD', true, true, ['MEM32', 'IMM8']),
-    new Command('ADD', true, true, ['MEM32', 'IMM16']),
-    new Command('CMP', true, false, ['REG8', 'REG8']),
-    new Command('CMP', true, false, ['REG16', 'REG16']),
-    new Command('CMP', true, false, ['REG32', 'REG32']),
-    new Command('XOR', true, false, ['MEM8', 'REG8']),
-    new Command('XOR', true, false, ['MEM16', 'REG16']),
-    new Command('XOR', true, false, ['MEM32', 'REG32']),
-    new Command('MOV', true, true, ['REG8', 'IMM8']),
-    new Command('MOV', true, true, ['REG16', 'IMM16']),
-    new Command('MOV', true, true, ['REG32', 'IMM32']),
-    new Command('AND', true, false, ['REG8', 'MEM8']),
-    new Command('AND', true, false, ['REG16', 'MEM16']),
-    new Command('AND', true, false, ['REG32', 'MEM32']),
+    new Command('CLI', false, false, []),
+    new Command('MUL', true, false, [['MEM8'], ['MEM16'], ['MEM32']]),
+    new Command('DIV', true, false, [['REG8'], ['REG16'], ['REG32']]),
+    new Command('ADD', true, true, [['MEM8', 'IMM8'], ['MEM16', 'IMM8'], ['MEM16', 'IMM16'],
+        ['MEM32', 'IMM8'], ['MEM32', 'IMM16']]),
+    new Command('CMP', true, false, [['REG8', 'REG8'], ['REG16', 'REG16'], ['REG32', 'REG32']]),
+    new Command('XOR', true, false, [['MEM8', 'REG8'], ['MEM16', 'REG16'], ['MEM32', 'REG32']]),
+    new Command('MOV', true, true, [['REG8', 'IMM8'], ['REG16', 'IMM16'], ['REG32', 'IMM32']]),
+    new Command('AND', true, false, [['REG8', 'MEM8'], ['REG16', 'MEM16'], ['REG32', 'MEM32']]),
 ];
 
 function Command(mnem, hasMODRM, hasIMM, operands) {
@@ -129,6 +114,8 @@ function tableHasVar(varName) {
 
 function Operand(type) {
     this.type = type;
+    this.typeWoSize = type.slice(0, 3);
+    this.size = type.slice(3);
 }
 
 let labelsTable = [];
@@ -146,14 +133,14 @@ function first_pass() {
         createTables(tokenObject, index);
         setOperandsType(tokenObject);
         if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {//TODO write function checkTypes where will be following code
-            let typesMismatch = doesOperandTypesMatch(tokenObject.tokens[0].lexeme, tokenObject.operands);
-            if (typesMismatch) {
+            let typesMatch = doesOperandTypesMatch(tokenObject.tokens[0].lexeme, tokenObject.operands);
+            if (!typesMatch) {
                 tokenObject.error = 'Error! Operand types must match!'
             }
         }
-        if (!tokenObject.hasOwnProperty('error')) {
-            calculateSize(tokenObject);
-        }
+        // if (!tokenObject.hasOwnProperty('error')) {
+        //     calculateSize(tokenObject);
+        // }
     });
 }
 
@@ -261,18 +248,25 @@ function setOperandsType(tokenObject) {
                         case 'Decimal number':
                         case 'Hexadecimal number':
                             let num = toDecimal(tokenObject.tokens[operand[0]].lexeme);
-                            tokenObject.operands.push(new Operand(getTypeOfIMM(num)));
-                            tokenObject.operands.push(getNumSize(num));
+                            let immType = getTypeOfIMM(num);
+                            tokenObject.operands.push(new Operand(immType));
                             break;
                         case 'Identifier':
                         //TODO
                     }
                 } else if (getId(tokenObject, i)) {
-                    tokenObject.operands.push(getIdType(tokenObject.tokens));
+                    let idType = getIdType(tokenObject.tokens);
+                    tokenObject.operands.push(new Operand(idType));
                 } else {
                     tokenObject.operands.push(new Operand('MEM'));
                 }
-            })
+            });
+            if (tokenObject.operands.length === 2 &&
+                (tokenObject.operands.every(op => op.typeWoSize === 'MEM') ||
+                    tokenObject.operands.every(op => op.typeWoSize === 'IMM'))) {
+                tokenObject.error = 'Error! Improper operand type!'
+            } else if (tokenObject.operands.some(op => op.type === 'MEM'))
+                checkMEMSize(tokenObject);
         } else if (tokenObject.type === 'ID_DEFINITION') {//TODO move this to the function that get size
             segmentsTable.slice(-1)[0].offset += getIdSize(tokenObject.tokens);
         }
@@ -291,34 +285,24 @@ function toDecimal(num) {
 }
 
 function getTypeOfIMM(num) {
-    if (num >= Math.pow(num, 16)) {
+    if (num >= Math.pow(2, 16)) {
         return 'IMM32';
-    } else if (num >= Math.pow(num, 8)) {
+    } else if (num >= Math.pow(2, 8)) {
         return 'IMM16';
     } else {
         return 'IMM8';
     }
 }
 
-function getNumSize(num) {
-    if (num >= Math.pow(num, 16)) {
-        return new Operand('IMM32');
-    } else if (num >= Math.pow(num, 8)) {
-        return new Operand('IMM16');
-    } else {
-        return new Operand('IMM8');
-    }
-}
-
-function getIdType(token) {
-    switch (variablesTable.slice(-1)[0].type) {
+function getIdType(tokens) {
+    let varToken = tokens.find(token => token.type === 'Identifier');
+    switch (variablesTable.find(variable => variable.name === varToken.lexeme).type) {
         case 'DB':
             return 'MEM8';
         case 'DW':
             return 'MEM16';
         case 'DD':
             return 'MEM32';
-
     }
 }
 
@@ -334,17 +318,25 @@ function getIdSize(tokens) {
     }
 }
 
-function doesOperandTypesMatch(mnem, operands) {
-    let command = getCommand(mnem);
-    for (let i = 0; i < operands.length; i++) {
-        if (operands[i].type !== command.operands[i] &&
-            operands[i].type !== command.operands[i] + '32' &&
-            operands[i].type !== command.operands[i] + '16' &&
-            operands[i].type !== command.operands[i] + '8') {
-            return true;
-        }
+function checkMEMSize(tokenObject) {
+    let opWoSize = tokenObject.operands.find(op => op.type === 'MEM');
+    let opWithSize = tokenObject.operands.find(op => op.type !== 'MEM' && op.typeWoSize !== 'IMM');
+    if (opWoSize && opWithSize) {
+        opWoSize.type += opWithSize.size;
+        opWoSize.size = opWithSize.size;
+    } else {
+        tokenObject.error = 'Error! Operand must have size!'
     }
-    return false;
+}
+
+function doesOperandTypesMatch(mnem, operands) {
+    let commandOperands = getCommand(mnem).operands;
+    let arrOfOps = operands.map(op => op.type);
+    if (commandOperands.length === 0) {
+        return arrOfOps.length === 0;
+    } else {
+        return commandOperands.some(opsSet => JSON.stringify(opsSet) === JSON.stringify(arrOfOps));
+    }
 }
 
 function calculateSize(tokenObject) {
