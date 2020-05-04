@@ -56,10 +56,10 @@ let commands = [
     new Command('MUL', true, false, [['MEM8'], ['MEM16'], ['MEM32']]),
     new Command('DIV', true, false, [['REG8'], ['REG16'], ['REG32']]),
     new Command('ADD', true, true, [['MEM8', 'IMM8'], ['MEM16', 'IMM8'], ['MEM16', 'IMM16'],
-        ['MEM32', 'IMM8'], ['MEM32', 'IMM16']]),
+        ['MEM32', 'IMM8'], ['MEM32', 'IMM32']]),
     new Command('CMP', true, false, [['REG8', 'REG8'], ['REG16', 'REG16'], ['REG32', 'REG32']]),
     new Command('XOR', true, false, [['MEM8', 'REG8'], ['MEM16', 'REG16'], ['MEM32', 'REG32']]),
-    new Command('MOV', true, true, [['REG8', 'IMM8'], ['REG16', 'IMM16'], ['REG32', 'IMM32']]),
+    new Command('MOV', false, true, [['REG8', 'IMM8'], ['REG16', 'IMM16'], ['REG32', 'IMM32']]),
     new Command('AND', true, false, [['REG8', 'MEM8'], ['REG16', 'MEM16'], ['REG32', 'MEM32']]),
 ];
 
@@ -118,12 +118,6 @@ function Operand(type) {
     this.size = type.slice(3);
 }
 
-let labelsTable = [];
-
-function tableHasLabel(labelName) {
-    return labelsTable.indexOf(labelName) !== -1;
-}
-
 let activeSeg = -1;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -132,15 +126,11 @@ function first_pass() {
         defineTokensType(tokenObject);
         createTables(tokenObject, index);
         setOperandsType(tokenObject);
-        if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {//TODO write function checkTypes where will be following code
-            let typesMatch = doesOperandTypesMatch(tokenObject.tokens[0].lexeme, tokenObject.operands);
-            if (!typesMatch) {
-                tokenObject.error = 'Error! Operand types must match!'
-            }
+        checkOpTypes(tokenObject);
+        calculateSize(tokenObject);
+        if (!tokenObject.hasOwnProperty('error')){
+            segmentsTable.slice(-1)[0].offset += tokenObject.offset;
         }
-        // if (!tokenObject.hasOwnProperty('error')) {
-        //     calculateSize(tokenObject);
-        // }
     });
 }
 
@@ -196,26 +186,23 @@ function createTables(tokenObject, index) {
         } else if (tokenObject.type === 'ASSUME_DEFINITION') {
             setSegReg(tokenObject.tokens, tokenObject.sentenceStructure);
         } else if (activeSeg !== -1) {
-            if (tokenObject.type === 'ID_DEFINITION') {
+            if (tokenObject.type === 'ID_DEFINITION' || tokenObject.type === 'LABEL') {
                 if (tableHasVar(tokenObject.tokens[0].lexeme)) {
                     tokenObject.error = 'Error! Duplicate of variables.'
                 } else {
                     variablesTable.push(new Variable(tokenObject.tokens[0].lexeme,
-                        tokenObject.tokens[1].lexeme,
-                        tokenObject.tokens[2].lexeme,
-                        segmentsTable.slice(-1)[0].name));
-                }
-            } else if (tokenObject.type === 'LABEL') {
-                if (tableHasLabel(tokenObject.tokens[0].lexeme)) {
-                    tokenObject.error = 'Error! Duplicate of labels.';
-                } else {
-                    labelsTable.push(tokenObject.tokens[0].lexeme);
+                        getVarType(tokenObject),
+                        0, segmentsTable.slice(-1)[0].name));
                 }
             }
         } else if (tokenObject.type !== 'END_DIRECTIVE') {
             tokenObject.error = 'Error! Data out of segment!';
         }
     }
+}
+
+function getVarType(tokenObject) {
+    return tokenObject.type==='LABEL' ? 'NEAR' : tokenObject.tokens[1].lexeme;
 }
 
 function setSegReg(tokens, structure) {
@@ -267,8 +254,6 @@ function setOperandsType(tokenObject) {
                 tokenObject.error = 'Error! Improper operand type!'
             } else if (tokenObject.operands.some(op => op.type === 'MEM'))
                 checkMEMSize(tokenObject);
-        } else if (tokenObject.type === 'ID_DEFINITION') {//TODO move this to the function that get size
-            segmentsTable.slice(-1)[0].offset += getIdSize(tokenObject.tokens);
         }
     }
 }
@@ -314,7 +299,6 @@ function getIdSize(tokens) {
             return 2;
         case 'DD':
             return 4;
-
     }
 }
 
@@ -329,6 +313,15 @@ function checkMEMSize(tokenObject) {
     }
 }
 
+function checkOpTypes(tokenObject) {
+    if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {//TODO write function checkTypes where will be following code
+        let typesMatch = doesOperandTypesMatch(tokenObject.tokens[0].lexeme, tokenObject.operands);
+        if (!typesMatch) {
+            tokenObject.error = 'Error! Operand types must match!'
+        }
+    }
+}
+
 function doesOperandTypesMatch(mnem, operands) {
     let commandOperands = getCommand(mnem).operands;
     let arrOfOps = operands.map(op => op.type);
@@ -340,69 +333,74 @@ function doesOperandTypesMatch(mnem, operands) {
 }
 
 function calculateSize(tokenObject) {
-    if (tokenObject.type === 'ID_DEFINITION') {
-        tokenObject.offset = getIdSize(tokenObject.tokens);
-    } else if (tokenObject.type === 'COMMAND') {
-        tokenObject.offset = 1;//TODO for jmp
-        if (getCommand(tokenObject.tokens[0].lexeme).hasMODRM) {
-            tokenObject.offset++;
-        }
-        let operands = tokenObject.operands;
-        for (let i = 0; i < operands.length; i++) {
-            if (operands[i].type === 'MEM') {
-                let reg16 = getReg16FromMemOp(tokenObject, i);
-                if (reg16) {
-                    if (!isAllowedReg16InMem(reg16)) {
-                        tokenObject.error = 'Error! Must be index or base register.';
-                        tokenObject.offset = 0;
-                        return;
-                    } else {
+    if (!tokenObject.hasOwnProperty('error')) {
+        if (tokenObject.type === 'ID_DEFINITION') {
+            tokenObject.offset = getIdSize(tokenObject.tokens);
+        } else if (tokenObject.type === 'COMMAND') {
+            tokenObject.offset = 1;
+            let operands = tokenObject.operands;
+            if (getCommand(tokenObject.tokens[0].lexeme).hasIMM) {
+                tokenObject.offset += getIMMSize(operands);
+            }
+            if (getCommand(tokenObject.tokens[0].lexeme).hasMODRM) {
+                tokenObject.offset++;
+            }
+            for (let i = 0; i < operands.length; i++) {
+                if (operands[i].typeWoSize === 'MEM') {
+                    if (operands[i].size == 16) {
                         tokenObject.offset++;
                     }
-                }
-                if (hasSegReg(tokenObject, i)) {
-                    if (!doesSegRegMatch(tokenObject, i)) {
-                        tokenObject.offset++;
+                    let reg16 = getReg16FromMemOp(tokenObject, i);
+                    if (reg16) {
+                        if (isAllowedReg16InMem(reg16)) {
+                            tokenObject.offset++;//16 to 32
+                        } else {
+                            tokenObject.error = 'Error! Must be index or base register.';
+                            tokenObject.offset = 0;
+                            return;
+                        }
                     }
-                } else if (hasId(tokenObject, i)) {
-                    if (!doesHiddenSegRegMatch(tokenObject, i)) {
-                        tokenObject.offset++;
-                    }
-                }
-                let reg = getRegToken(tokenObject, i);
-                if (getId(tokenObject, i)) {
-                    switch (reg.type.split(' ')[1]) {
-                        case '8':
+                    if (hasSegReg(tokenObject, i)) {
+                        if (!doesSegRegMatch(tokenObject, i)) {
                             tokenObject.offset++;
-                            break;
-                        case '16':
-                            tokenObject.offset += 2;
-                            break;
-                        case '32':
-                            tokenObject.offset += 4;
-                            break;
+                        }
+                    } else if (hasId(tokenObject, i)) {
+                        if (!doesHiddenSegRegMatch(tokenObject, i)) {
+                            tokenObject.offset++;
+                        }
                     }
-                } else if (reg.lexeme === 'BP' || reg.lexeme === 'EBP') {
-                    tokenObject.offset++;
-                }
-
-                if (reg.lexeme === 'ESP') {
-                    tokenObject.offset++;
+                    let reg = getRegToken(tokenObject, i);
+                    if (getId(tokenObject, i)) {
+                        tokenObject.offset += reg.type.split(' ')[1] / 8;
+                    } else if (reg.lexeme === 'BP' || reg.lexeme === 'EBP') {
+                        tokenObject.offset = 0;
+                        tokenObject.error = 'Error! When using BP or EBP must be disp8/32!';
+                        return;
+                    }
+                    if (reg.lexeme === 'ESP') {
+                        tokenObject.offset++;
+                    }
                 }
             }
+        } else {
+            tokenObject.offset = 0;
         }
     } else {
         tokenObject.offset = 0;
     }
 }
 
+function getIMMSize(operands) {
+    let imm = operands.find(op => op.typeWoSize === 'IMM');
+    return imm.size / 8;
+}
+
 function getReg16FromMemOp(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
     let opEnd = tokenObject.sentenceStructure.operands[opPos][1] + opBeg - 1;
-    for (let i = opBeg; i < opEnd; i++) {
-        if (tokenObject.tokens[i].type === 'Register 16') {
-            return tokenObject.tokens[i].lexeme
-        }
+    let reg16Token = tokenObject.tokens.slice(opBeg, opEnd - opBeg + 1).find(token => token.type === 'Register 16');
+    if (reg16Token) {
+        return reg16Token.lexeme
     }
 }
 
@@ -435,7 +433,7 @@ function getRegToken(tokenObject, opPos) {
             return tokenObject.tokens[i];
         }
     }
-}
+}//TODO
 
 function getId(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
@@ -445,7 +443,7 @@ function getId(tokenObject, opPos) {
             return tokenObject.tokens[i].lexeme;
         }
     }
-}
+}//TODO
 
 function isSSReg(reg) {
     return reg === 'BP' || reg === 'EBP' || reg === 'ESP';
@@ -462,7 +460,7 @@ function doesHiddenSegRegMatch(tokenObject, opPos) {
     let idSegment = variablesTable.find(variable => variable.name === id).segment;
     let defaultSegReg = isSSReg(regToken.lexeme) ? 'SS' : 'DS';
     return getSegRegBySegment(idSegment) === defaultSegReg;
-}
+}//TODO
 
 first_pass();
 
