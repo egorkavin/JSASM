@@ -112,6 +112,10 @@ function tableHasVar(varName) {
     return variablesTable.find(variable => variable.name === varName) !== undefined;
 }
 
+function getVarValue(varName) {
+    return variablesTable.find(variable => variable.name === varName).value;
+}
+
 function Operand(type) {
     this.type = type;
     this.typeWoSize = type.slice(0, 3);
@@ -128,8 +132,12 @@ function first_pass() {
         setOperandsType(tokenObject);
         checkOpTypes(tokenObject);
         calculateSize(tokenObject);
-        if (!tokenObject.hasOwnProperty('error')){
+        if (!tokenObject.hasOwnProperty('error')) {
             segmentsTable.slice(-1)[0].offset += tokenObject.offset;
+            tokenObject.size = segmentsTable.slice(-1)[0].offset - tokenObject.offset;
+            if (tokenObject.type === 'ID_DEFINITION' || tokenObject.type === 'LABEL') {
+                variablesTable.slice(-1)[0].value = tokenObject.size;
+            }
         }
     });
 }
@@ -161,7 +169,16 @@ function defineTokensType(tokenObject) {
             tokensArray[0].lexeme === 'END') {
             tokenObject.type = 'END_DIRECTIVE';
         } else if (tokensArray[0].type === 'Command') {
-            tokenObject.type = 'COMMAND';
+            switch (tokensArray[0].lexeme) {
+                case 'JMP':
+                    tokenObject.type = 'JMP_COMMAND';
+                    break;
+                case 'JE':
+                    tokenObject.type = 'JE_COMMAND';
+                    break;
+                default:
+                    tokenObject.type = 'COMMAND';
+            }
         } else {
             tokenObject.error = 'Error! Unknown token!';
         }
@@ -202,7 +219,7 @@ function createTables(tokenObject, index) {
 }
 
 function getVarType(tokenObject) {
-    return tokenObject.type==='LABEL' ? 'NEAR' : tokenObject.tokens[1].lexeme;
+    return tokenObject.type === 'LABEL' ? 'NEAR' : tokenObject.tokens[1].lexeme;
 }
 
 function setSegReg(tokens, structure) {
@@ -382,12 +399,29 @@ function calculateSize(tokenObject) {
                     }
                 }
             }
+        } else if (tokenObject.type === 'JMP_COMMAND' || tokenObject.type === 'JE_COMMAND') {
+            if (tokenObject.type === 'JMP_COMMAND'){
+                tokenObject.offset = 2;
+            } else {
+                let label = tokenObject.tokens.slice(-1)[0];
+                if (!tableHasVar(label.lexeme)){
+                    tokenObject.offset = 6;
+                } else if (tableHasVar(label.lexeme) && getJumpLength(label) < 127){
+                    tokenObject.offset = 2;
+                } else if (tableHasVar(label.lexeme) && getJumpLength(label) >= 127){
+                    tokenObject.offset = 4;
+                }
+            }
         } else {
             tokenObject.offset = 0;
         }
     } else {
         tokenObject.offset = 0;
     }
+}
+
+function getJumpLength(label) {
+    return Math.abs(segmentsTable.slice(-1)[0].offset - getVarValue(label.lexeme));
 }
 
 function getIMMSize(operands) {
@@ -476,10 +510,10 @@ function printFirstPass() {
 }
 
 function printMainTable() {
-    let data = [];
+    let data = [['$', 'Size', 'Assembly line']];
     for (let lexemeObj of tableOfLexemes) {
         lexemeObj.assemblyString = lexemeObj.assemblyString.replace(/\t/g, '    ');
-        data.push([lexemeObj.size, lexemeObj.offset, lexemeObj.assemblyString]);
+        data.push([getHexValue(lexemeObj.size), getHexValue(lexemeObj.offset), lexemeObj.assemblyString]);
         if (lexemeObj.hasOwnProperty('error')) {
             data.push(['', '', lexemeObj.error]);
         }
@@ -496,6 +530,7 @@ function printSegRegTable() {
 function printSegmentTable() {
     let data = [['Segment name', 'Bit depth', 'Offset']];
     for (let segment of segmentsTable) {
+        segment.offset = getHexValue(segment.offset);
         data.push(Object.values(segment));
     }
     fs.appendFileSync("table1.txt", table(data));
@@ -504,9 +539,14 @@ function printSegmentTable() {
 function printVarTable() {
     let data = [['Name', 'Type', 'Value', 'Segment']];
     for (let variable of variablesTable) {
+        variable.value = getHexValue(variable.value);
         data.push(Object.values(variable));
     }
     fs.appendFileSync("table1.txt", table(data));
+}
+
+function getHexValue(src) {
+    return '0'.repeat(4 - src.toString(16).length) + src.toString(16).toUpperCase()
 }
 
 printFirstPass();
