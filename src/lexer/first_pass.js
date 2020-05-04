@@ -12,9 +12,9 @@ let fs = require('fs');
 *       F7 /4   MUL EAX, r/m32
 *
 *   DIV reg
-*       F6 /6   MUL AL, r/m8
-*       F7 /6   MUL AX, r/m16
-*       F7 /6   MUL EAX, r/m32
+*       F6 /6   DIV AL, r/m8
+*       F7 /6   DIV AX, r/m16
+*       F7 /6   DIV EAX, r/m32
 *
 *   ADD mem, imm
 *       80 /0 iw    ADD r/m8, imm8
@@ -53,13 +53,29 @@ let fs = require('fs');
 
 let commands = [
     new Command('CLI', false, false),
-    new Command('MUL', true, false, ['MEM']),
-    new Command('DIV', true, false, ['REG']),
-    new Command('ADD', true, true, ['MEM', 'IMM']),
-    new Command('CMP', true, false, ['REG', 'REG']),
-    new Command('XOR', true, false, ['MEM', 'REG']),
-    new Command('MOV', true, true, ['REG', 'IMM']),
-    new Command('AND', true, false, ['REG', 'MEM']),
+    new Command('MUL', true, false, ['MEM8']),
+    new Command('MUL', true, false, ['MEM16']),
+    new Command('MUL', true, false, ['MEM32']),
+    new Command('DIV', true, false, ['REG8']),
+    new Command('DIV', true, false, ['REG16']),
+    new Command('DIV', true, false, ['REG32']),
+    new Command('ADD', true, true, ['MEM8', 'IMM8']),
+    new Command('ADD', true, true, ['MEM16', 'IMM8']),
+    new Command('ADD', true, true, ['MEM16', 'IMM16']),
+    new Command('ADD', true, true, ['MEM32', 'IMM8']),
+    new Command('ADD', true, true, ['MEM32', 'IMM16']),
+    new Command('CMP', true, false, ['REG8', 'REG8']),
+    new Command('CMP', true, false, ['REG16', 'REG16']),
+    new Command('CMP', true, false, ['REG32', 'REG32']),
+    new Command('XOR', true, false, ['MEM8', 'REG8']),
+    new Command('XOR', true, false, ['MEM16', 'REG16']),
+    new Command('XOR', true, false, ['MEM32', 'REG32']),
+    new Command('MOV', true, true, ['REG8', 'IMM8']),
+    new Command('MOV', true, true, ['REG16', 'IMM16']),
+    new Command('MOV', true, true, ['REG32', 'IMM32']),
+    new Command('AND', true, false, ['REG8', 'MEM8']),
+    new Command('AND', true, false, ['REG16', 'MEM16']),
+    new Command('AND', true, false, ['REG32', 'MEM32']),
 ];
 
 function Command(mnem, hasMODRM, hasIMM, operands) {
@@ -122,15 +138,14 @@ function tableHasLabel(labelName) {
 }
 
 let activeSeg = -1;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 function first_pass() {
     tableOfLexemes.forEach((tokenObject, index) => {
         defineTokensType(tokenObject);
         createTables(tokenObject, index);
-        if (!tokenObject.hasOwnProperty('error')) {
-            setOperandsType(tokenObject);
-        }
-        if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {
+        setOperandsType(tokenObject);
+        if (!tokenObject.hasOwnProperty('error') && tokenObject.type === 'COMMAND') {//TODO write function checkTypes where will be following code
             let typesMismatch = doesOperandTypesMatch(tokenObject.tokens[0].lexeme, tokenObject.operands);
             if (typesMismatch) {
                 tokenObject.error = 'Error! Operand types must match!'
@@ -225,40 +240,42 @@ function setSegReg(tokens, structure) {
 }
 
 function setOperandsType(tokenObject) {
-    if (tokenObject.type === 'COMMAND') {
-        tokenObject.operands = [];
-        let structure = tokenObject.sentenceStructure;
-        let operands = structure.operands;
-        operands.forEach((operand, i) => {
-            if (operand[1] === 1) {
-                switch (tokenObject.tokens[operand[0]].type) {
-                    case 'Register 8':
-                        tokenObject.operands.push(new Operand('REG8'));
-                        break;
-                    case 'Register 16':
-                        tokenObject.operands.push(new Operand('REG16'));
-                        break;
-                    case 'Register 32':
-                        tokenObject.operands.push(new Operand('REG32'));
-                        break;
-                    case 'Binary number':
-                    case 'Decimal number':
-                    case 'Hexadecimal number':
-                        let num = toDecimal(tokenObject.tokens[operand[0]].lexeme);
-                        tokenObject.operands.push(new Operand(getTypeOfIMM(num)));
-                        tokenObject.operands.push(getNumSize(num));
-                        break;
-                    case 'Identifier':
-                    //TODO
+    if (!tokenObject.hasOwnProperty('error')) {
+        if (tokenObject.type === 'COMMAND') {
+            tokenObject.operands = [];
+            let structure = tokenObject.sentenceStructure;
+            let operands = structure.operands;
+            operands.forEach((operand, i) => {
+                if (operand[1] === 1) {
+                    switch (tokenObject.tokens[operand[0]].type) {
+                        case 'Register 8':
+                            tokenObject.operands.push(new Operand('REG8'));
+                            break;
+                        case 'Register 16':
+                            tokenObject.operands.push(new Operand('REG16'));
+                            break;
+                        case 'Register 32':
+                            tokenObject.operands.push(new Operand('REG32'));
+                            break;
+                        case 'Binary number':
+                        case 'Decimal number':
+                        case 'Hexadecimal number':
+                            let num = toDecimal(tokenObject.tokens[operand[0]].lexeme);
+                            tokenObject.operands.push(new Operand(getTypeOfIMM(num)));
+                            tokenObject.operands.push(getNumSize(num));
+                            break;
+                        case 'Identifier':
+                        //TODO
+                    }
+                } else if (getId(tokenObject, i)) {
+                    tokenObject.operands.push(getIdType(tokenObject.tokens));
+                } else {
+                    tokenObject.operands.push(new Operand('MEM'));
                 }
-            } else if (getId(tokenObject, i)) {
-                tokenObject.operands.push(getIdType(tokenObject.tokens));
-            } else {
-                tokenObject.operands.push(new Operand('MEM'));
-            }
-        })
-    } else if (tokenObject.type === 'ID_DEFINITION') {//TODO move this to the function that get size
-        segmentsTable.slice(-1)[0].offset += getIdSize(tokenObject.tokens);
+            })
+        } else if (tokenObject.type === 'ID_DEFINITION') {//TODO move this to the function that get size
+            segmentsTable.slice(-1)[0].offset += getIdSize(tokenObject.tokens);
+        }
     }
 }
 
@@ -274,9 +291,9 @@ function toDecimal(num) {
 }
 
 function getTypeOfIMM(num) {
-    if (num >= Math.pow(num, 16)){
+    if (num >= Math.pow(num, 16)) {
         return 'IMM32';
-    } else if (num >= Math.pow(num, 8)){
+    } else if (num >= Math.pow(num, 8)) {
         return 'IMM16';
     } else {
         return 'IMM8';
@@ -456,10 +473,6 @@ function doesHiddenSegRegMatch(tokenObject, opPos) {
 }
 
 first_pass();
-//console.log(tableOfLexemes);
-//console.log(variablesTable);
-//console.log(segmentsTable);
-// console.log(labelsTable);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const table = require('table').table;
