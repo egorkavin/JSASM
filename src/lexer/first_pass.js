@@ -138,6 +138,8 @@ function first_pass() {
             if (tokenObject.type === 'ID_DEFINITION' || tokenObject.type === 'LABEL') {
                 variablesTable.slice(-1)[0].value = tokenObject.size;
             }
+        } else {
+            tokenObject.size = 0;
         }
     });
 }
