@@ -18,10 +18,10 @@ let fs = require('fs');
 *
 *   ADD mem, imm
 *       80 /0 iw    ADD r/m8, imm8
-*       81 /0 id    ADD r/m16, imm16
-*       81 /0 ib    ADD r/m32, imm32
 *       83 /0 ib    ADD r/m16, imm8
+*       81 /0 id    ADD r/m16, imm16
 *       83 /0 ib    ADD r/m32, imm8
+*       81 /0 ib    ADD r/m32, imm32
 *
 *   CMP reg, reg
 *       3A /r   CMP r8, r/m8
@@ -52,26 +52,31 @@ let fs = require('fs');
  */
 
 let commands = [
-    new Command('CLI', false, false, []),
-    new Command('MUL', true, false, [['MEM8'], ['MEM16'], ['MEM32']]),
-    new Command('DIV', true, false, [['REG8'], ['REG16'], ['REG32']]),
+    new Command('CLI', false, false, [], ['FA']),
+    new Command('MUL', true, false, [['MEM8'], ['MEM16'], ['MEM32']], ['F6', 'F7', 'F7']),
+    new Command('DIV', true, false, [['REG8'], ['REG16'], ['REG32']], ['F6', 'F7', 'F7']),
     new Command('ADD', true, true, [['MEM8', 'IMM8'], ['MEM16', 'IMM8'], ['MEM16', 'IMM16'],
-        ['MEM32', 'IMM8'], ['MEM32', 'IMM32']]),
-    new Command('CMP', true, false, [['REG8', 'REG8'], ['REG16', 'REG16'], ['REG32', 'REG32']]),
-    new Command('XOR', true, false, [['MEM8', 'REG8'], ['MEM16', 'REG16'], ['MEM32', 'REG32']]),
-    new Command('MOV', false, true, [['REG8', 'IMM8'], ['REG16', 'IMM16'], ['REG32', 'IMM32']]),
-    new Command('AND', true, false, [['REG8', 'MEM8'], ['REG16', 'MEM16'], ['REG32', 'MEM32']]),
+        ['MEM32', 'IMM8'], ['MEM32', 'IMM32']], ['80', '83', '81', '83', '81']),
+    new Command('CMP', true, false, [['REG8', 'REG8'], ['REG16', 'REG16'], ['REG32', 'REG32']], ['3A', '3B', '3B']),
+    new Command('XOR', true, false, [['MEM8', 'REG8'], ['MEM16', 'REG16'], ['MEM32', 'REG32']], ['30', '31', '31']),
+    new Command('MOV', false, true, [['REG8', 'IMM8'], ['REG16', 'IMM16'], ['REG32', 'IMM32']], ['B0', 'B8', 'B8']),
+    new Command('AND', true, false, [['REG8', 'MEM8'], ['REG16', 'MEM16'], ['REG32', 'MEM32']], ['22', '23', '23']),
 ];
 
-function Command(mnem, hasMODRM, hasIMM, operands) {
+function Command(mnem, hasMODRM, hasIMM, operands, opCode) {
     this.mnem = mnem;
     this.hasMODRM = hasMODRM;
     this.hasIMM = hasIMM;
     this.operands = operands;
+    this.opCode = opCode;
 }
 
 function getCommand(mnem) {
     return commands.find(command => command.mnem === mnem);
+}
+
+function getOpCodeArr(mnem) {
+    return getCommand(mnem).opCode;
 }
 
 let SegRegTable = {
@@ -124,14 +129,34 @@ function Operand(type) {
 
 let activeSeg = -1;
 
+let regTable = [
+    {regs: ['AL', 'AX', 'EAX'], value: '000B'},
+    {regs: ['CL', 'CX', 'ECX'], value: '001B'},
+    {regs: ['DL', 'DX', 'EDX'], value: '010B'},
+    {regs: ['BL', 'BX', 'EBX'], value: '011B'},
+    {regs: ['AH', 'SP', 'ESP'], value: '100B'},
+    {regs: ['CH', 'BP', 'EBP'], value: '101B'},
+    {regs: ['DH', 'SI', 'ESI'], value: '110B'},
+    {regs: ['BH', 'DI', 'EDI'], value: '111B'},
+];
+
+let reg16Table = {
+    SI: '100B',
+    DI: '101B',
+    BP: '110B',
+    BX: '111B',
+};
+
+function getRegValue(regName) {
+    return regTable.find(obj => obj.regs.some(reg => reg === regName)).value;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+let firstPassFunctions = [defineTokensType, createTables, setOperandsType, checkOpTypes, calculateSize];
+
 function first_pass() {
     tableOfLexemes.forEach((tokenObject, index) => {
-        defineTokensType(tokenObject);
-        createTables(tokenObject, index);
-        setOperandsType(tokenObject);
-        checkOpTypes(tokenObject);
-        calculateSize(tokenObject);
+        firstPassFunctions.forEach(func => func(tokenObject));
         if (!tokenObject.hasOwnProperty('error')) {
             segmentsTable.slice(-1)[0].offset += tokenObject.offset;
             tokenObject.size = segmentsTable.slice(-1)[0].offset - tokenObject.offset;
@@ -237,7 +262,7 @@ function setOperandsType(tokenObject) {
         if (tokenObject.type === 'COMMAND') {
             tokenObject.operands = [];
             let structure = tokenObject.sentenceStructure;
-            let operands = structure.operands;
+            let operands = structure.operands;//TODO CLI проверить к-во операндов
             operands.forEach((operand, i) => {
                 if (operand[1] === 1) {
                     switch (tokenObject.tokens[operand[0]].type) {
@@ -365,14 +390,16 @@ function calculateSize(tokenObject) {
                 tokenObject.offset++;
             }
             for (let i = 0; i < operands.length; i++) {
+                if (operands[i].size == 16 && !tokenObject.hasOwnProperty('prefix66')) {
+                    tokenObject.prefix66 = true;
+                    tokenObject.offset++;
+                }
                 if (operands[i].typeWoSize === 'MEM') {
-                    if (operands[i].size == 16) {
-                        tokenObject.offset++;
-                    }
                     let reg16 = getReg16FromMemOp(tokenObject, i);
                     if (reg16) {
                         if (isAllowedReg16InMem(reg16)) {
-                            tokenObject.offset++;//16 to 32
+                            tokenObject.prefix67 = true;
+                            tokenObject.offset++;
                         } else {
                             tokenObject.error = 'Error! Must be index or base register.';
                             tokenObject.offset = 0;
@@ -381,10 +408,12 @@ function calculateSize(tokenObject) {
                     }
                     if (hasSegReg(tokenObject, i)) {
                         if (!doesSegRegMatch(tokenObject, i)) {
+                            tokenObject.prefixSeg = getSegRegPrefix(tokenObject, i);
                             tokenObject.offset++;
                         }
                     } else if (hasId(tokenObject, i)) {
                         if (!doesHiddenSegRegMatch(tokenObject, i)) {
+                            tokenObject.prefixSeg = getHiddenSegRegPrefix(tokenObject, i);
                             tokenObject.offset++;
                         }
                     }
@@ -397,20 +426,23 @@ function calculateSize(tokenObject) {
                         return;
                     }
                     if (reg.lexeme === 'ESP') {
+                        tokenObject.hasSib = true;
                         tokenObject.offset++;
+                    } else {
+                        tokenObject.hasSib = false;
                     }
                 }
             }
         } else if (tokenObject.type === 'JMP_COMMAND' || tokenObject.type === 'JE_COMMAND') {
-            if (tokenObject.type === 'JMP_COMMAND'){
+            if (tokenObject.type === 'JMP_COMMAND') {
                 tokenObject.offset = 2;
             } else {
                 let label = tokenObject.tokens.slice(-1)[0];
-                if (!tableHasVar(label.lexeme)){
+                if (!tableHasVar(label.lexeme)) {
                     tokenObject.offset = 6;
-                } else if (tableHasVar(label.lexeme) && getJumpLength(label) < 127){
+                } else if (tableHasVar(label.lexeme) && getJumpLength(label) < 127) {
                     tokenObject.offset = 2;
-                } else if (tableHasVar(label.lexeme) && getJumpLength(label) >= 127){
+                } else if (tableHasVar(label.lexeme) && getJumpLength(label) >= 127) {
                     tokenObject.offset = 4;
                 }
             }
@@ -434,7 +466,7 @@ function getIMMSize(operands) {
 function getReg16FromMemOp(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
     let opEnd = tokenObject.sentenceStructure.operands[opPos][1] + opBeg - 1;
-    let reg16Token = tokenObject.tokens.slice(opBeg, opEnd - opBeg + 1).find(token => token.type === 'Register 16');
+    let reg16Token = tokenObject.tokens.slice(opBeg, opEnd + 1).find(token => token.type === 'Register 16')
     if (reg16Token) {
         return reg16Token.lexeme
     }
@@ -459,6 +491,23 @@ function doesSegRegMatch(tokenObject, opPos) {
 function getSegReg(tokenObject, opPos) {
     let opBeg = tokenObject.sentenceStructure.operands[opPos][0];
     return tokenObject.tokens[opBeg].lexeme;
+}
+
+function getSegRegPrefix(tokenObject, i) {
+    switch (getSegReg(tokenObject, i)) {
+        case 'CS':
+            return '2E';
+        case 'SS':
+            return '36';
+        case 'DS':
+            return '3E';
+        case 'ES':
+            return '26';
+        case 'FS':
+            return '64';
+        case 'GS':
+            return '65';
+    }
 }
 
 function getRegToken(tokenObject, opPos) {
@@ -497,6 +546,25 @@ function doesHiddenSegRegMatch(tokenObject, opPos) {
     let defaultSegReg = isSSReg(regToken.lexeme) ? 'SS' : 'DS';
     return getSegRegBySegment(idSegment) === defaultSegReg;
 }//TODO
+
+function getHiddenSegRegPrefix(tokenObject, opPos) {
+    let id = getId(tokenObject, opPos);
+    let idSegment = variablesTable.find(variable => variable.name === id).segment;
+    switch (getSegRegBySegment(idSegment)) {
+        case 'CS':
+            return '2E';
+        case 'SS':
+            return '36';
+        case 'DS':
+            return '3E';
+        case 'ES':
+            return '26';
+        case 'FS':
+            return '64';
+        case 'GS':
+            return '65';
+    }
+}
 
 first_pass();
 
@@ -552,3 +620,163 @@ function getHexValue(src) {
 }
 
 printFirstPass();
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+function secondPass() {
+    tableOfLexemes.forEach((tokenObject, i) => {
+        tokenObject.bytes = '';
+        if (!tokenObject.hasOwnProperty('error')) {
+            if (tokenObject.type === 'ID_DEFINITION') {
+                if (tokenObject.tokens[2].type === 'Text constant') {
+                    tokenObject.tokens[2].lexeme.split('').forEach(char => {
+                        tokenObject.bytes += char.charCodeAt(0).toString(16) + ' ';
+                    })
+                } else {
+                    tokenObject.bytes = toDecimal(tokenObject.tokens[2].lexeme).toString(16);
+                }
+            } else if (tokenObject.type === 'COMMAND') {
+                if (tokenObject.hasOwnProperty('prefixSeg')) {
+                    tokenObject.bytes += tokenObject.prefixSeg + ': ';
+                }
+                if (tokenObject.hasOwnProperty('prefix66')) {
+                    tokenObject.bytes += '66| '
+                }
+                if (tokenObject.hasOwnProperty('prefix67')) {
+                    tokenObject.bytes += '67| '
+                }
+                let opcode = getCurrentOpCode(tokenObject.tokens[0].lexeme, tokenObject.operands);
+                if (tokenObject.tokens[0].lexeme === 'MOV') {
+                    opcode = toDecimal(opcode + 'H');
+                    opcode += toDecimal(getRegValue(tokenObject.tokens[1].lexeme));
+                    opcode = opcode.toString(16).toUpperCase();
+                    let imm = tokenObject.tokens[tokenObject.tokens.length - 1].lexeme;
+                    tokenObject.bytes += opcode + ' ' + toDecimal(imm).toString(16).toUpperCase();
+                } else if (tokenObject.tokens[0].lexeme === 'MUL') {
+                    tokenObject.bytes += opcode + ' ';
+                    let mod = '10';
+                    let reg = '100';
+                    let regFromOp = tokenObject.tokens[tokenObject.tokens.length - 2].lexeme;
+                    let rm = tokenObject.hasOwnProperty('prefix67') ? reg16Table[regFromOp] : getRegValue(regFromOp);
+                    rm = rm.slice(0, -1);
+                    tokenObject.bytes += modrmToHex(mod, reg, rm);
+
+                    if (tokenObject.hasSib){
+                        tokenObject.bytes += ' 24'
+                    }
+
+                    let id = getVarValue(getId(tokenObject, 0));
+                    let idValue = tokenObject.hasOwnProperty('prefix67') ? '0'.repeat(4 - id.length) + id : '0'.repeat(8 - id.length) + id;
+                    tokenObject.bytes += ' ' + idValue + 'r';
+                } else if (tokenObject.tokens[0].lexeme === 'DIV') {
+                    tokenObject.bytes += opcode + ' ';
+                    let mod = '11';
+                    let reg = '110';
+                    let regFromOp = tokenObject.tokens[tokenObject.tokens.length - 1].lexeme;
+                    let rm = getRegValue(regFromOp);
+                    rm = rm.slice(0, -1);
+                    tokenObject.bytes += modrmToHex(mod, reg, rm);
+                } else if (tokenObject.tokens[0].lexeme === 'CMP') {
+                    tokenObject.bytes += opcode + ' ';
+                    let mod = '11';
+                    let reg1FromOp = tokenObject.tokens[1].lexeme;
+                    let reg2FromOp = tokenObject.tokens[3].lexeme;
+                    let reg = getRegValue(reg1FromOp);
+                    let rm = getRegValue(reg2FromOp);
+                    reg = reg.slice(0, -1);
+                    rm = rm.slice(0, -1);
+                    tokenObject.bytes += modrmToHex(mod, reg, rm);
+                } else if (tokenObject.tokens[0].lexeme === 'ADD') {
+                    tokenObject.bytes += opcode + ' ';
+                    let mod = '10';
+                    let reg = '000';
+                    let regFromOp = tokenObject.tokens[3].lexeme;
+                    let rm = tokenObject.hasOwnProperty('prefix67') ? reg16Table[regFromOp] : getRegValue(regFromOp);
+                    rm = rm.slice(0, -1);
+                    tokenObject.bytes += modrmToHex(mod, reg, rm) + ' ';
+
+                    if (tokenObject.hasSib){
+                        tokenObject.bytes += ' 24'
+                    }
+
+                    let imm = tokenObject.tokens[tokenObject.tokens.length - 1].lexeme;
+                    let id = getVarValue(getId(tokenObject, 0));
+                    let idValue = tokenObject.hasOwnProperty('prefix67') ? '0'.repeat(4 - id.length) + id : '0'.repeat(8 - id.length) + id;
+                    tokenObject.bytes += ' ' + idValue + 'r ';
+                    tokenObject.bytes += toDecimal(imm).toString(16).toUpperCase();
+                } else if (tokenObject.tokens[0].lexeme === 'XOR') {
+                    tokenObject.bytes += opcode + ' ';
+                    let mod = hasId(tokenObject, 0) ? '10' : '00';
+                    let regFromOp2 = tokenObject.tokens[tokenObject.tokens.length - 1].lexeme;
+                    let reg = getRegValue(regFromOp2).slice(0, -1);
+                    let regFromOp1 = getRegToken(tokenObject, 0).lexeme;
+                    let rm = tokenObject.hasOwnProperty('prefix67') ? reg16Table[regFromOp1] : getRegValue(regFromOp1);
+                    rm = rm.slice(0, -1);
+                    tokenObject.bytes += modrmToHex(mod, reg, rm);
+
+                    if (tokenObject.hasSib){
+                        tokenObject.bytes += ' 24'
+                    }
+
+                    if (hasId(tokenObject, 0)){
+                        let id = getVarValue(getId(tokenObject, 0));
+                        let idValue = tokenObject.hasOwnProperty('prefix67') ? '0'.repeat(4 - id.length) + id : '0'.repeat(8 - id.length) + id;
+                        tokenObject.bytes += ' ' + idValue + 'r';
+                    }
+                } else if (tokenObject.tokens[0].lexeme === 'AND'){
+                    tokenObject.bytes += opcode + ' ';
+                    let mod = hasId(tokenObject, 1) ? '10' : '00';
+                    let regFromOp1 = tokenObject.tokens[1].lexeme;
+                    let reg = getRegValue(regFromOp1).slice(0, -1);
+                    let regFromOp2 = getRegToken(tokenObject, 1).lexeme;
+                    let rm = tokenObject.hasOwnProperty('prefix67') ? reg16Table[regFromOp2] : getRegValue(regFromOp2);
+                    rm = rm.slice(0, -1);
+                    tokenObject.bytes += modrmToHex(mod, reg, rm);
+
+                    if (tokenObject.hasSib){
+                        tokenObject.bytes += ' 24'
+                    }
+
+                    if (hasId(tokenObject, 1)){
+                        let id = getVarValue(getId(tokenObject, 1));
+                        let idValue = tokenObject.hasOwnProperty('prefix67') ? '0'.repeat(4 - id.length) + id : '0'.repeat(8 - id.length) + id;
+                        tokenObject.bytes += ' ' + idValue + 'r';
+                    }
+                }
+            }
+        }
+    });
+}
+
+function getCurrentOpCode(mnem, operands) {
+    let opCodeArr = getOpCodeArr(mnem);
+    let commandOperands = getCommand(mnem).operands;
+    let arrOfOps = operands.map(op => op.type);
+    if (commandOperands.length === 0) {
+        return opCodeArr[0];
+    } else {
+        return opCodeArr[commandOperands.findIndex(opsSet => JSON.stringify(opsSet) === JSON.stringify(arrOfOps))];
+    }
+}
+
+function modrmToHex(mod, reg, rm) {
+    return toDecimal(mod + reg + rm + 'B').toString(16).toUpperCase();
+}
+
+secondPass();
+
+function printMain2Table() {
+    fs.writeFileSync("table2.txt", "Result of second pass\n\n");
+    let data = [['$', 'Size', 'Bytes', 'Assembly line']];
+    for (let lexemeObj of tableOfLexemes) {
+        lexemeObj.assemblyString = lexemeObj.assemblyString.replace(/\t/g, '    ');
+        data.push([getHexValue(lexemeObj.size), getHexValue(lexemeObj.offset), lexemeObj.bytes, lexemeObj.assemblyString]);
+        if (lexemeObj.hasOwnProperty('error')) {
+            data.push(['', '', '', lexemeObj.error]);
+        }
+    }
+    fs.appendFileSync('table2.txt', table(data));
+}
+
+printMain2Table();
+
+let a;
