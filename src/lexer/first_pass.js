@@ -436,14 +436,16 @@ function calculateSize(tokenObject) {
         } else if (tokenObject.type === 'JMP_COMMAND' || tokenObject.type === 'JE_COMMAND') {
             if (tokenObject.type === 'JMP_COMMAND') {
                 tokenObject.offset = 2;
+                tokenObject.jmpNearCode = 'EB';
             } else {
                 let label = tokenObject.tokens.slice(-1)[0];
-                if (!tableHasVar(label.lexeme)) {
+                if (!tableHasVar(label.lexeme) || Math.abs(getJumpLength(label)) >= 127) {
                     tokenObject.offset = 6;
-                } else if (tableHasVar(label.lexeme) && getJumpLength(label) < 127) {
+                    tokenObject.jmpNearCode = '74';
+                    tokenObject.jmpFarCode = '0F 84';
+                } else if (Math.abs(getJumpLength(label)) < 127) {
                     tokenObject.offset = 2;
-                } else if (tableHasVar(label.lexeme) && getJumpLength(label) >= 127) {
-                    tokenObject.offset = 4;
+                    tokenObject.jmpNearCode = '74';
                 }
             }
         } else {
@@ -455,7 +457,7 @@ function calculateSize(tokenObject) {
 }
 
 function getJumpLength(label) {
-    return Math.abs(segmentsTable.slice(-1)[0].offset - getVarValue(label.lexeme));
+    return parseInt(getVarValue(label.lexeme), 16) - parseInt(segmentsTable.slice(-1)[0].offset, 16);
 }
 
 function getIMMSize(operands) {
@@ -573,13 +575,13 @@ const table = require('table').table;
 
 function printFirstPass() {
     fs.writeFileSync("table1.txt", "Result of first pass\n\n");
-    printMainTable();
-    printSegmentTable();
-    printSegRegTable();
-    printVarTable();
+    printMainTable('table1.txt');
+    printSegmentTable('table1.txt');
+    printSegRegTable('table1.txt');
+    printVarTable('table1.txt');
 }
 
-function printMainTable() {
+function printMainTable(file) {
     let data = [['$', 'Size', 'Assembly line']];
     for (let lexemeObj of tableOfLexemes) {
         lexemeObj.assemblyString = lexemeObj.assemblyString.replace(/\t/g, '    ');
@@ -588,31 +590,31 @@ function printMainTable() {
             data.push(['', '', lexemeObj.error]);
         }
     }
-    fs.appendFileSync('table1.txt', table(data));
+    fs.appendFileSync(file, table(data));
 }
 
-function printSegRegTable() {
+function printSegRegTable(file) {
     let data = Object.entries(SegRegTable);
     data.unshift(['Segment register', 'Destination']);
-    fs.appendFileSync("table1.txt", table(data));
+    fs.appendFileSync(file, table(data));
 }
 
-function printSegmentTable() {
+function printSegmentTable(file) {
     let data = [['Segment name', 'Bit depth', 'Offset']];
     for (let segment of segmentsTable) {
         segment.offset = getHexValue(segment.offset);
         data.push(Object.values(segment));
     }
-    fs.appendFileSync("table1.txt", table(data));
+    fs.appendFileSync(file, table(data));
 }
 
-function printVarTable() {
+function printVarTable(file) {
     let data = [['Name', 'Type', 'Value', 'Segment']];
     for (let variable of variablesTable) {
         variable.value = getHexValue(variable.value);
         data.push(Object.values(variable));
     }
-    fs.appendFileSync("table1.txt", table(data));
+    fs.appendFileSync(file, table(data));
 }
 
 function getHexValue(src) {
@@ -629,10 +631,13 @@ function secondPass() {
             if (tokenObject.type === 'ID_DEFINITION') {
                 if (tokenObject.tokens[2].type === 'Text constant') {
                     tokenObject.tokens[2].lexeme.split('').forEach(char => {
-                        tokenObject.bytes += char.charCodeAt(0).toString(16) + ' ';
+                        tokenObject.bytes += char.charCodeAt(0).toString(16).toUpperCase() + ' ';
                     })
                 } else {
-                    tokenObject.bytes = toDecimal(tokenObject.tokens[2].lexeme).toString(16);
+                    tokenObject.bytes = toDecimal(tokenObject.tokens[2].lexeme).toString(16).toUpperCase();
+                    if (tokenObject.bytes.length % 2 !== 0 || isNaN(tokenObject.bytes[0])){
+                        tokenObject.bytes = '0' + tokenObject.bytes;
+                    }
                 }
             } else if (tokenObject.type === 'COMMAND') {
                 if (tokenObject.hasOwnProperty('prefixSeg')) {
@@ -660,7 +665,7 @@ function secondPass() {
                     rm = rm.slice(0, -1);
                     tokenObject.bytes += modrmToHex(mod, reg, rm);
 
-                    if (tokenObject.hasSib){
+                    if (tokenObject.hasSib) {
                         tokenObject.bytes += ' 24'
                     }
 
@@ -694,7 +699,7 @@ function secondPass() {
                     rm = rm.slice(0, -1);
                     tokenObject.bytes += modrmToHex(mod, reg, rm) + ' ';
 
-                    if (tokenObject.hasSib){
+                    if (tokenObject.hasSib) {
                         tokenObject.bytes += ' 24'
                     }
 
@@ -713,16 +718,16 @@ function secondPass() {
                     rm = rm.slice(0, -1);
                     tokenObject.bytes += modrmToHex(mod, reg, rm);
 
-                    if (tokenObject.hasSib){
+                    if (tokenObject.hasSib) {
                         tokenObject.bytes += ' 24'
                     }
 
-                    if (hasId(tokenObject, 0)){
+                    if (hasId(tokenObject, 0)) {
                         let id = getVarValue(getId(tokenObject, 0));
                         let idValue = tokenObject.hasOwnProperty('prefix67') ? '0'.repeat(4 - id.length) + id : '0'.repeat(8 - id.length) + id;
                         tokenObject.bytes += ' ' + idValue + 'r';
                     }
-                } else if (tokenObject.tokens[0].lexeme === 'AND'){
+                } else if (tokenObject.tokens[0].lexeme === 'AND') {
                     tokenObject.bytes += opcode + ' ';
                     let mod = hasId(tokenObject, 1) ? '10' : '00';
                     let regFromOp1 = tokenObject.tokens[1].lexeme;
@@ -732,14 +737,41 @@ function secondPass() {
                     rm = rm.slice(0, -1);
                     tokenObject.bytes += modrmToHex(mod, reg, rm);
 
-                    if (tokenObject.hasSib){
+                    if (tokenObject.hasSib) {
                         tokenObject.bytes += ' 24'
                     }
 
-                    if (hasId(tokenObject, 1)){
+                    if (hasId(tokenObject, 1)) {
                         let id = getVarValue(getId(tokenObject, 1));
                         let idValue = tokenObject.hasOwnProperty('prefix67') ? '0'.repeat(4 - id.length) + id : '0'.repeat(8 - id.length) + id;
                         tokenObject.bytes += ' ' + idValue + 'r';
+                    }
+                }
+            } else if (tokenObject.type === 'JMP_COMMAND' || tokenObject.type === 'JE_COMMAND') {
+                let label = tokenObject.tokens.slice(-1)[0];
+                if (!tableHasVar(label.lexeme)) {
+                    tokenObject.error = 'Error! Non-existent label!';
+                } else {
+                    let jmpLen = parseInt(getVarValue(label.lexeme), 16) - tokenObject.size - tokenObject.offset;
+                    let jmpBytes = (jmpLen >>> 0).toString(16).toUpperCase();
+                    jmpLen = Math.abs(jmpLen);
+                    switch (tokenObject.offset) {
+                        case 6:
+                            if (jmpLen >= 127) {
+                                tokenObject.bytes = tokenObject.jmpFarCode + ' ' + jmpBytes;
+                            } else {
+                                jmpBytes = (parseInt(jmpBytes, 16) + 4).toString(16).padStart(2, '0');
+                                jmpBytes += ' 90 90 90 90';
+                                tokenObject.bytes = tokenObject.jmpNearCode + ' ' + jmpBytes;
+                            }
+                            break;
+                        case 2:
+                            if (tokenObject.type === 'JMP_COMMAND' && jmpLen >= 127) {
+                                tokenObject.bytes = tokenObject.jmpNearCode + ' 00';
+                                tokenObject.error = 'Error! Relative jump out of range!';
+                            } else {
+                                tokenObject.bytes = tokenObject.jmpNearCode + ' ' + jmpBytes.slice(-2).padStart(2, '0');
+                            }
                     }
                 }
             }
@@ -764,7 +796,7 @@ function modrmToHex(mod, reg, rm) {
 
 secondPass();
 
-function printMain2Table() {
+function printMain2Table(file) {
     fs.writeFileSync("table2.txt", "Result of second pass\n\n");
     let data = [['$', 'Size', 'Bytes', 'Assembly line']];
     for (let lexemeObj of tableOfLexemes) {
@@ -774,9 +806,14 @@ function printMain2Table() {
             data.push(['', '', '', lexemeObj.error]);
         }
     }
-    fs.appendFileSync('table2.txt', table(data));
+    fs.appendFileSync(file, table(data));
 }
 
-printMain2Table();
+function printSecondPass(){
+    printMain2Table('table2.txt');
+    printSegmentTable('table2.txt');
+    printSegRegTable('table2.txt');
+    printVarTable('table2.txt');
+}
 
-let a;
+printSecondPass();
