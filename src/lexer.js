@@ -54,9 +54,9 @@ function makeArrayOfTokens(string) {
                 char = char.toUpperCase();
                 currentLexeme.push(char);
                 if (!LEXEMES.isNumber(char) && char !== 'H') {
-                    currentLexeme = currentLexeme.slice(0, -1);
+                    //currentLexeme = currentLexeme.slice(0, -1);
                     makeToken(currentLexeme, state, tokens);
-                    state = 'start';
+                    state = 'error';
                     i--;
                 }
                 break;

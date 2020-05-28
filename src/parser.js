@@ -1,15 +1,14 @@
 let tableOfLexemes = require('./lexer');
 let LEXEMES = require('./lexemes');
-let fs = require('fs');
 
 function makeSyntaxTable(tableOfLexemes) {
     tableOfLexemes.forEach(obj => {
-        if (obj.hasOwnProperty('tokens')) {
+        if (obj.hasOwnProperty('tokens') && !obj.hasOwnProperty('error')) {
             let sentenceStructure = makeSentence(obj);
             if (sentenceStructure.hasOwnProperty('errorMessage')) {
                 obj.error = sentenceStructure.errorMessage;
             } else {
-                obj.sentenceStructure = makeSentence(obj);
+                obj.sentenceStructure = sentenceStructure;
             }
         }
     });
@@ -93,7 +92,6 @@ function makeSentence(obj) {
                     state = 'openingBracketCheck';
                     amount++;
                 } else {
-                    //return `Syntax error '${token.lexeme}': expected operand`;
                     state = 'openingBracketCheck';
                     i--;
                 }
@@ -141,24 +139,4 @@ function makeSentence(obj) {
     return sentenceStructure;
 }
 
-// function outputTable(tableOfLexemes) {
-//     fs.writeFileSync("table.txt", "Result of lexical and syntactic analysis\n\n");
-//     tableOfLexemes.forEach(tokenObject => {
-//         fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
-//         tokenObject.tokens.forEach((item, index) => {
-//             if (item.type === 'error') {
-//                 fs.appendFileSync("table.txt", item.lexeme + '\n');
-//             } else {
-//                 fs.appendFileSync("table.txt", `${index}\t${item.lexeme}\t${item.length}\t${item.type}\n`);
-//             }
-//         });
-//         fs.appendFileSync('table.txt', `Sentence structure:
-//          Label or name: ${tokenObject.sentenceStructure.labelOrName}
-//          Mnemonic: ${JSON.stringify(tokenObject.sentenceStructure.mnem)}
-//          Operands: ${JSON.stringify(tokenObject.sentenceStructure.operands)}`);
-//         fs.appendFileSync("table.txt", "\n\n");
-//     })
-// }
-
-//outputTable(makeSyntaxTable(tableOfLexemes));
 module.exports = makeSyntaxTable(tableOfLexemes);
