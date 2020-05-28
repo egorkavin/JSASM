@@ -4,7 +4,7 @@ const fs = require('fs');
 const table = require('table').table;
 let {
     getCommand, getOpCodeArr, tableHasVar, getVarValue, reg16Table, getRegValue
-} = require('./commandsAnalysis');
+} = require('./commandsInfo');
 const {
     toDecimal, getId, hasId, getRegToken, getHexValue, printSegRegTable, printSegmentTable, printVarTable
 } = require('./commonPassFuncs');

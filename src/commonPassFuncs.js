@@ -1,6 +1,6 @@
 const table = require('table').table;
 const fs = require('fs');
-let {SegRegTable, segmentsTable, variablesTable} = require('./commandsAnalysis');
+let {SegRegTable, segmentsTable, variablesTable} = require('./commandsInfo');
 
 function toDecimal(num) {
     switch (num.slice(-1)) {
