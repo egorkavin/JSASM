@@ -1,5 +1,6 @@
 let tableOfLexemes = require('./lexer');
 let LEXEMES = require('./lexemes');
+// const fs = require('fs');
 
 function makeSyntaxTable(tableOfLexemes) {
     tableOfLexemes.forEach(obj => {
@@ -124,7 +125,6 @@ function makeSentence(obj) {
             case 'newOp':
                 if (token.lexeme === ',') {
                     state = 'checkShortDword';
-                    //sentenceStructure += i - amount + '\t' + amount + '|';
                     sentenceStructure.operands.push([i - amount, amount]);
                     amount = 0;
                 } else {
@@ -138,5 +138,26 @@ function makeSentence(obj) {
     }
     return sentenceStructure;
 }
+
+// function outputTable(tableOfLexemes) {
+//     fs.writeFileSync("tableParser.txt", "Result of lexical and syntactic analysis\n\n");
+//     tableOfLexemes.forEach(tokenObject => {
+//         fs.appendFileSync("table.txt", tokenObject.assemblyString.split('\t').join(' ') + '\n');
+//         tokenObject.tokens.forEach((item, index) => {
+//             if (item.type === 'error') {
+//                 fs.appendFileSync("tableParser.txt", item.lexeme + '\n');
+//             } else {
+//                 fs.appendFileSync("tableParser.txt", `${index}\t${item.lexeme}\t${item.length}\t${item.type}\n`);
+//             }
+//         });
+//         fs.appendFileSync('tableParser.txt', `Sentence structure:
+//          Label or name: ${tokenObject.sentenceStructure.labelOrName}
+//          Mnemonic: ${JSON.stringify(tokenObject.sentenceStructure.mnem)}
+//          Operands: ${JSON.stringify(tokenObject.sentenceStructure.operands)}`);
+//         fs.appendFileSync("tableParser.txt", "\n\n");
+//     })
+// }
+//
+// outputTable(makeSyntaxTable(tableOfLexemes));
 
 module.exports = makeSyntaxTable(tableOfLexemes);
